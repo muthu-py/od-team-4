@@ -1,0 +1,7 @@
+export const LOGIN = '/login'
+export const FORGOT_PASSWORD = '/forgot-password'
+export const STUDENT = '/student'
+export const TEACHER = '/teacher'
+export const ADMIN = '/admin'
+export const MENTEES = '/teacher/mentees'
+export const STUDENTS = '/teacher/students'
