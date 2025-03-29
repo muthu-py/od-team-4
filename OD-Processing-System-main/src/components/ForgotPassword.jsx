@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/ForgotPassword.css';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import LockIcon from '@mui/icons-material/Lock';
 
 const ForgotPassword = () => {
     const [email, setEmail] = useState('');
@@ -73,6 +75,9 @@ const ForgotPassword = () => {
     return (
         <div className="forgot-password-container">
             <div className="forgot-password-box">
+                <div className="logo-container">
+                    <img src="/ssn-logo.webp" alt="SSN Logo" className="ssn-logo" />
+                </div>
                 <h2 className="forgot-password-title">Reset Password</h2>
                 {error && <div className="error-message">{error}</div>}
                 {message && <div className="success-message">{message}</div>}
@@ -80,14 +85,16 @@ const ForgotPassword = () => {
                 {step === 1 && (
                     <form onSubmit={handleSendOTP}>
                         <div className="form-group">
-                            <label htmlFor="email">Email</label>
-                            <input
-                                type="email"
-                                id="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                            />
+                            <div className="input-group">
+                                <PersonOutlineIcon className="input-icon" />
+                                <input
+                                    type="email"
+                                    placeholder="Enter your email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                            </div>
                         </div>
                         <button type="submit" className="submit-button" disabled={isLoading}>
                             {isLoading ? 'Sending...' : 'Send OTP'}
@@ -98,15 +105,17 @@ const ForgotPassword = () => {
                 {step === 2 && (
                     <form onSubmit={handleVerifyOTP}>
                         <div className="form-group">
-                            <label htmlFor="otp">Enter OTP</label>
-                            <input
-                                type="text"
-                                id="otp"
-                                value={otp}
-                                onChange={(e) => setOtp(e.target.value)}
-                                required
-                                maxLength="6"
-                            />
+                            <div className="input-group">
+                                <LockIcon className="input-icon" />
+                                <input
+                                    type="text"
+                                    placeholder="Enter OTP"
+                                    value={otp}
+                                    onChange={(e) => setOtp(e.target.value)}
+                                    required
+                                    maxLength="6"
+                                />
+                            </div>
                         </div>
                         <button type="submit" className="submit-button" disabled={isLoading}>
                             {isLoading ? 'Verifying...' : 'Verify OTP'}
@@ -117,15 +126,17 @@ const ForgotPassword = () => {
                 {step === 3 && (
                     <form onSubmit={handleResetPassword}>
                         <div className="form-group">
-                            <label htmlFor="newPassword">New Password</label>
-                            <input
-                                type="password"
-                                id="newPassword"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                required
-                                minLength="6"
-                            />
+                            <div className="input-group">
+                                <LockIcon className="input-icon" />
+                                <input
+                                    type="password"
+                                    placeholder="Enter new password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    required
+                                    minLength="6"
+                                />
+                            </div>
                         </div>
                         <button type="submit" className="submit-button" disabled={isLoading}>
                             {isLoading ? 'Resetting...' : 'Reset Password'}

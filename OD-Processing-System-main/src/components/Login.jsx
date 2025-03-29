@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/Login.css';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 const Login = () => {
     const navigate = useNavigate();
@@ -31,15 +33,13 @@ const Login = () => {
                 localStorage.setItem('token', response.data.token);
                 localStorage.setItem('user', JSON.stringify(response.data.user));
                 
-                // Redirect based on role
                 const roleRoutes = {
-                    student: '/student',  // Changed from '/form/student' to match your route structure
+                    student: '/student',
                     teacher: '/teacher',
                     admin: '/admin'
                 };
                 
                 const redirectPath = roleRoutes[response.data.user.role] || '/';
-                console.log('Redirecting to:', redirectPath);
                 navigate(redirectPath);
             }
         } catch (error) {
@@ -55,40 +55,52 @@ const Login = () => {
     return (
         <div className="login-container">
             <div className="login-box">
-                <h2 className="login-title">SSN On-Duty Management</h2>
+                <div className="login-header">
+                    <div className="logo-container">
+                        <img src="/ssn-logo.webp" alt="SSN Logo" className="ssn-logo" />
+                    </div>
+                </div>
                 {error && <div className="error-message">{error}</div>}
-                <div>
-                    <form onSubmit={handleSubmit}>
-                        <div className="form-group">
-                            <label htmlFor="email">Email</label>
+                <form onSubmit={handleSubmit} className="login-form">
+                    <div className="form-group">
+                        <div className="input-group">
+                            <PersonOutlineIcon className="input-icon" />
                             <input
                                 type="email"
                                 id="email"
                                 name="email"
                                 value={formData.email}
                                 onChange={handleChange}
+                                placeholder="Username"
                                 required
                             />
                         </div>
-                        <div className="form-group">
-                            <label htmlFor="password">Password</label>
+                    </div>
+                    <div className="form-group">
+                        <div className="input-group">
+                            <LockOutlinedIcon className="input-icon" />
                             <input
                                 type="password"
                                 id="password"
                                 name="password"
                                 value={formData.password}
                                 onChange={handleChange}
+                                placeholder="Password"
                                 required
                             />
                         </div>
-                        <button type="submit" className="login-button" disabled={isLoading}>
-                            {isLoading ? 'Logging in...' : 'Login'}
-                        </button>
-                    </form>
+                    </div>
+                    <button type="submit" className="login-button" disabled={isLoading}>
+                        {isLoading ? (
+                            <div className="loading-spinner"></div>
+                        ) : (
+                            'Login'
+                        )}
+                    </button>
                     <div className="forgot-password">
                         <Link to="/forgot-password">Forgot Password?</Link>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     );

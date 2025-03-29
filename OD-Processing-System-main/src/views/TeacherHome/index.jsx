@@ -4,40 +4,107 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import CardActionArea from '@mui/material/CardActionArea';
-import { Grid, Container, Divider } from '@mui/material';
+import { Grid, Container, Divider, Paper } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Badge } from '@mui/material';
 import * as ROUTES from '../../constants/routes';
+import { styled } from '@mui/material/styles';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import EmailIcon from '@mui/icons-material/Email';
+import BusinessIcon from '@mui/icons-material/Business';
+import PhoneIcon from '@mui/icons-material/Phone';
+import GroupIcon from '@mui/icons-material/Group';
+import SchoolIcon from '@mui/icons-material/School';
 
-// Updated profile section styling
-const ProfileLabel = ({ children }) => (
-    <Typography 
-        component="span" 
-        sx={{ 
-            color: '#666',
-            minWidth: '120px',
-            display: 'inline-block',
-            fontWeight: 500
-        }}
-    >
-        {children}
-    </Typography>
-);
+const StyledContainer = styled(Container)(({ theme }) => ({
+    minHeight: '100vh',
+    background: 'linear-gradient(145deg, #f5f7fa 0%, #e8edf5 100%)',
+    paddingTop: theme.spacing(4),
+    paddingBottom: theme.spacing(4),
+}));
 
-const ProfileValue = ({ children }) => (
-    <Typography 
-        component="span" 
-        sx={{ 
-            color: '#333',
-            fontWeight: 400
-        }}
-    >
-        {children}
-    </Typography>
-);
+const DashboardHeader = styled(Box)(({ theme }) => ({
+    marginBottom: theme.spacing(4),
+    '& h1': {
+        background: 'linear-gradient(45deg, #1a237e 30%, #0d47a1 90%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        fontWeight: 700,
+        letterSpacing: '0.5px',
+    },
+}));
+
+const ProfileCard = styled(Card)(({ theme }) => ({
+    background: 'white',
+    borderRadius: '16px',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    backdropFilter: 'blur(20px)',
+    transition: 'transform 0.3s ease-in-out',
+    '&:hover': {
+        transform: 'translateY(-5px)',
+    },
+}));
+
+const ProfileSection = styled(Box)(({ theme }) => ({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(2.5),
+    padding: theme.spacing(1),
+}));
+
+const ProfileRow = styled(Box)(({ theme }) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(2),
+    padding: theme.spacing(1),
+    borderRadius: '8px',
+    transition: 'background-color 0.2s ease',
+    '&:hover': {
+        backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    },
+}));
+
+const ActionCard = styled(Card)(({ theme }) => ({
+    height: '100%',
+    borderRadius: '16px',
+    background: 'white',
+    transition: 'all 0.3s ease',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    backdropFilter: 'blur(20px)',
+    overflow: 'hidden',
+    '&:hover': {
+        transform: 'translateY(-5px)',
+        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)',
+    },
+}));
+
+const CardTitle = styled(Typography)(({ theme }) => ({
+    fontSize: '1.5rem',
+    fontWeight: 600,
+    background: 'linear-gradient(45deg, #1a237e 30%, #0d47a1 90%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    marginBottom: theme.spacing(1),
+}));
+
+const CardDescription = styled(Typography)(({ theme }) => ({
+    color: '#666',
+    fontSize: '0.95rem',
+}));
+
+const IconWrapper = styled(Box)(({ theme }) => ({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    borderRadius: '12px',
+    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+    color: '#1976d2',
+}));
 
 export default function TeacherHome() {
-    // State to store teacher profile data
     const [teacherProfile, setTeacherProfile] = useState({
         name: 'Loading...',
         email: 'Loading...',
@@ -45,59 +112,9 @@ export default function TeacherHome() {
         phone: 'Loading...'
     });
 
-    // Import the initial requests data - MOVED THESE BEFORE THEY'RE USED
-    // const menteesinitialRequests = [
-    //     {
-    //         id: 1,
-    //         name: 'John Doe',
-    //         odSubmissionStatus: 'Pending',
-    //         // ... other fields
-    //     },
-    //     {
-    //         id: 2,
-    //         name: 'Jane Smith',
-    //         odSubmissionStatus: 'Pending',
-    //         // ... other fields
-    //     }
-    //     // ... other requests
-    // ];
-
-    // const studentinitialRequests = [
-    //     {
-    //         id: 1,
-    //         name: 'John Doe',
-    //         odSubmissionStatus: 'Pending',
-    //         // ... other fields
-    //     },
-    //     {
-    //         id: 2,
-    //         name: 'Jane Smith',
-    //         odSubmissionStatus: 'Pending',
-    //         // ... other fields
-    //     },
-    //     {
-    //         id: 3,
-    //         name: 'Jane Smith',
-    //         odSubmissionStatus: 'Pending',
-    //         // ... other fields
-    //     }
-    //     // ... other requests
-    // ];
-
-    // Get the count of pending requests - NOW THESE WILL WORK
-    // const menteespendingCount = menteesinitialRequests.filter(
-    //     request => request.odSubmissionStatus === 'Pending'
-    // ).length;
-
-    // const studentpendingCount = studentinitialRequests.filter(
-    //     request => request.odSubmissionStatus === 'Pending'
-    // ).length;
-
-    // Fetch teacher data from localStorage on component mount
     useEffect(() => {
         try {
             const userData = JSON.parse(localStorage.getItem('user'));
-            console.log('User data from localStorage:', userData); // Debug log
             if (userData) {
                 setTeacherProfile({
                     name: userData.name || 'Not available',
@@ -105,11 +122,9 @@ export default function TeacherHome() {
                     department: userData.department || 'IT',
                     phone: userData.phone || 'Not available'
                 });
-            } else {
-                console.log('No user data found in localStorage');
             }
         } catch (error) {
-            console.error('Error parsing user data from localStorage:', error);
+            console.error('Error parsing user data:', error);
         }
     }, []);
 
@@ -117,219 +132,99 @@ export default function TeacherHome() {
         {
             id: 1,
             title: 'Mentees',
-            description: 'View Mentees\' OD submissions',
-            path: ROUTES.MENTEES
+            description: 'View and manage your mentees\' OD submissions',
+            path: ROUTES.MENTEES,
+            icon: <GroupIcon sx={{ fontSize: 28 }} />,
         },
         {
             id: 2,
             title: 'Students',
-            description: 'View Students\' OD submissions',
-            path: ROUTES.STUDENTS
+            description: 'Review and process student OD applications',
+            path: ROUTES.STUDENTS,
+            icon: <SchoolIcon sx={{ fontSize: 28 }} />,
         }
     ];
 
     return (
-        <Container maxWidth="lg">
-            <Box sx={{ 
-                padding: { xs: 2, sm: 3, md: 4 },
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 3
-            }}>
-                {/* Dashboard Header */}
-                <Box sx={{ mb: 4 }}>
-                    <Typography 
-                        variant="h4" 
-                        component="h1" 
-                        sx={{ 
-                            fontWeight: 600,
-                            color: '#015498',
-                            mb: 1
-                        }}
-                    >
-                        Dashboard
-                    </Typography>
-                    <Divider />
-                </Box>
+        <StyledContainer maxWidth="lg">
+            <DashboardHeader>
+                <Typography variant="h4" component="h1">
+                    Teacher Dashboard
+                </Typography>
+                <Divider sx={{ mt: 2, mb: 4, opacity: 0.1 }} />
+            </DashboardHeader>
 
-                {/* Enhanced Profile Section */}
-                <Card 
-                    variant="outlined" 
-                    sx={{ 
-                        mb: 4,
-                        borderRadius: 2,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                        backgroundColor: '#fff',
-                        border: '1px solid #e0e0e0'
-                    }}
-                >
-                    <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                            <Typography 
-                                variant="h5" 
-                                component="div" 
-                                sx={{ 
-                                    fontWeight: 600,
-                                    color: '#015498',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 1
-                                }}
-                            >
-                                Profile Information
-                            </Typography>
-                        </Box>
-                        <Box sx={{ 
-                            display: 'flex', 
-                            flexDirection: 'column',
-                            gap: 2
-                        }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <ProfileLabel>Name:</ProfileLabel>
-                                <ProfileValue>{teacherProfile.name}</ProfileValue>
+            <ProfileCard elevation={0}>
+                <CardContent sx={{ p: 3 }}>
+                    <CardTitle variant="h5" gutterBottom>
+                        Profile Information
+                    </CardTitle>
+                    <ProfileSection>
+                        <ProfileRow>
+                            <IconWrapper>
+                                <AccountCircleIcon />
+                            </IconWrapper>
+                            <Box>
+                                <Typography variant="subtitle2" color="textSecondary">Name</Typography>
+                                <Typography variant="body1">{teacherProfile.name}</Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <ProfileLabel>Email:</ProfileLabel>
-                                <ProfileValue>{teacherProfile.email}</ProfileValue>
+                        </ProfileRow>
+                        <ProfileRow>
+                            <IconWrapper>
+                                <EmailIcon />
+                            </IconWrapper>
+                            <Box>
+                                <Typography variant="subtitle2" color="textSecondary">Email</Typography>
+                                <Typography variant="body1">{teacherProfile.email}</Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <ProfileLabel>Department:</ProfileLabel>
-                                <ProfileValue>{teacherProfile.department}</ProfileValue>
+                        </ProfileRow>
+                        <ProfileRow>
+                            <IconWrapper>
+                                <BusinessIcon />
+                            </IconWrapper>
+                            <Box>
+                                <Typography variant="subtitle2" color="textSecondary">Department</Typography>
+                                <Typography variant="body1">{teacherProfile.department}</Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <ProfileLabel>Phone:</ProfileLabel>
-                                <ProfileValue>{teacherProfile.phone}</ProfileValue>
+                        </ProfileRow>
+                        <ProfileRow>
+                            <IconWrapper>
+                                <PhoneIcon />
+                            </IconWrapper>
+                            <Box>
+                                <Typography variant="subtitle2" color="textSecondary">Phone</Typography>
+                                <Typography variant="body1">{teacherProfile.phone}</Typography>
                             </Box>
-                        </Box>
-                    </CardContent>
-                </Card>
+                        </ProfileRow>
+                    </ProfileSection>
+                </CardContent>
+            </ProfileCard>
 
-                {/* Cards Grid */}
-                <Grid 
-                    container 
-                    spacing={3} 
-                    justifyContent="center"
-                    alignItems="stretch"
-                >
-                    {cards.map((card) => (
-                        <Grid 
-                            item 
-                            xs={12} 
-                            sm={6} 
-                            md={4} 
-                            key={card.id} 
-                            sx={{ 
-                                display: 'flex',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            <Link 
-                                to={card.path} 
-                                style={{ 
-                                    textDecoration: 'none',
-                                    width: '100%',
-                                    maxWidth: '360px',
-                                    color: 'grey'
-                                }}
-                            >
-                                <Card 
-                                    variant="outlined" 
-                                    sx={{ 
-                                        height: '100%',
-                                        position: 'relative',
-                                        borderRadius: 2,
-                                        backgroundColor: '#f5f5f5',
-                                        border: '1px solid #e0e0e0',
-                                        transition: 'all 0.3s ease',
-                                        '&:hover': {
-                                            transform: 'translateY(-4px)',
-                                            boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-                                        }
-                                    }}
-                                >
-                                    <CardActionArea 
-                                        sx={{ 
-                                            height: '100%',
-                                            padding: 1
-                                        }}
-                                    >
-                                        <CardContent 
-                                            sx={{ 
-                                                padding: 3,
-                                                '&:last-child': { 
-                                                    paddingBottom: 3 
-                                                }
-                                            }}
-                                        >
-                                            <Box sx={{ position: 'relative', mb: 2 }}>
-                                                {card.id === 1 && (
-                                                    <Badge 
-                                                        //badgeContent={menteespendingCount}
-                                                        color="error"
-                                                        sx={{
-                                                            position: 'absolute',
-                                                            top: -8,
-                                                            right: -8,
-                                                            '& .MuiBadge-badge': {
-                                                                fontSize: '0.75rem',
-                                                                height: '22px',
-                                                                minWidth: '22px',
-                                                                borderRadius: '11px',
-                                                                fontWeight: 600
-                                                            }
-                                                        }}
-                                                    />
-                                                )}
-                                                {card.id === 2 && (
-                                                    <Badge 
-                                                        //badgeContent={studentpendingCount}
-                                                        color="error"
-                                                        sx={{
-                                                            position: 'absolute',
-                                                            top: -8,
-                                                            right: -8,
-                                                            '& .MuiBadge-badge': {
-                                                                fontSize: '0.75rem',
-                                                                height: '22px',
-                                                                minWidth: '22px',
-                                                                borderRadius: '11px',
-                                                                fontWeight: 600
-                                                            }
-                                                        }}
-                                                    />
-                                                )}
-                                                <Typography 
-                                                    variant="h5" 
-                                                    component="div"
-                                                    sx={{ 
-                                                        fontWeight: 600,
-                                                        color: 'text.primary',
-                                                        letterSpacing: '-0.5px'
-                                                    }}
-                                                >
-                                                    {card.title}
-                                                </Typography>
-                                            </Box>
-                                            <Typography 
-                                                variant="body2" 
-                                                color="text.secondary"
-                                                sx={{ 
-                                                    mt: 1,
-                                                    fontSize: '0.95rem',
-                                                    lineHeight: 1.5
-                                                }}
-                                            >
-                                                {card.description}
-                                            </Typography>
-                                        </CardContent>
-                                    </CardActionArea>
-                                </Card>
-                            </Link>
-                        </Grid>
-                    ))}
-                </Grid>
-            </Box>
-        </Container>
+            <Grid container spacing={4} sx={{ mt: 4 }}>
+                {cards.map((card) => (
+                    <Grid item xs={12} sm={6} key={card.id}>
+                        <Link to={card.path} style={{ textDecoration: 'none' }}>
+                            <ActionCard>
+                                <CardActionArea>
+                                    <CardContent sx={{ p: 4 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                            <IconWrapper>
+                                                {card.icon}
+                                            </IconWrapper>
+                                            <CardTitle variant="h6">
+                                                {card.title}
+                                            </CardTitle>
+                                        </Box>
+                                        <CardDescription>
+                                            {card.description}
+                                        </CardDescription>
+                                    </CardContent>
+                                </CardActionArea>
+                            </ActionCard>
+                        </Link>
+                    </Grid>
+                ))}
+            </Grid>
+        </StyledContainer>
     );
 }
-//when the mentees card is clicks it should point out to mentees.jsx file
