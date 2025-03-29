@@ -6,6 +6,7 @@ import Mentees from '../views/TeacherHome/mentees.jsx'
 import Students from '../views/TeacherHome/students.jsx'
 import Login from '../components/Login.jsx'
 import ForgotPassword from '../components/ForgotPassword.jsx'
+import AdminDashboard from '../components/admin/AdminDashboard.jsx'
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -39,6 +40,15 @@ function AppRouter() {
                         <>
                             <Navbar />
                             <view.TeacherHome />
+                        </>
+                    </ProtectedRoute>
+                } />
+
+                <Route path={ROUTES.ADMIN} element={
+                    <ProtectedRoute>
+                        <>
+                            <Navbar />
+                            <AdminDashboard />
                         </>
                     </ProtectedRoute>
                 } />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import * as ROUTES from '../constants/routes';
 import '../styles/Login.css';
 
 const Login = () => {
@@ -25,24 +26,33 @@ const Login = () => {
         setError('');
         
         try {
+            console.log('Attempting login with:', formData);
             const response = await axios.post('http://localhost:5000/api/login', formData);
             
             if (response.data.token) {
+                console.log('Login successful:', response.data);
                 localStorage.setItem('token', response.data.token);
                 localStorage.setItem('user', JSON.stringify(response.data.user));
                 
                 // Redirect based on role
                 const roleRoutes = {
-                    student: '/student',  // Changed from '/form/student' to match your route structure
-                    teacher: '/teacher',
-                    admin: '/admin'
+                    student: ROUTES.STUDENT,
+                    teacher: ROUTES.TEACHER,
+                    admin: ROUTES.ADMIN
                 };
                 
-                const redirectPath = roleRoutes[response.data.user.role] || '/';
+                const redirectPath = roleRoutes[response.data.user.role];
                 console.log('Redirecting to:', redirectPath);
-                navigate(redirectPath);
+                
+                if (redirectPath) {
+                    navigate(redirectPath);
+                } else {
+                    console.error('Invalid role:', response.data.user.role);
+                    setError('Invalid user role');
+                }
             }
         } catch (error) {
+            console.error('Login error:', error);
             setError(
                 error.response?.data?.message || 
                 'Unable to connect to the server. Please try again.'
@@ -86,7 +96,7 @@ const Login = () => {
                         </button>
                     </form>
                     <div className="forgot-password">
-                        <Link to="/forgot-password">Forgot Password?</Link>
+                        <Link to={ROUTES.FORGOT_PASSWORD}>Forgot Password?</Link>
                     </div>
                 </div>
             </div>

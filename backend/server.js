@@ -478,3 +478,120 @@ app.patch('/api/od-applications/:id/files', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+// Middleware to check if user is admin
+const isAdmin = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Admin access required' });
+        }
+
+        next();
+    } catch (error) {
+        res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
+// Get all users (admin only)
+app.get('/api/users', isAdmin, async (req, res) => {
+    try {
+        const users = await User.find().select('-password');
+        res.json({ users });
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create new user (admin only)
+app.post('/api/users', isAdmin, async (req, res) => {
+    try {
+        const { name, email, password, role, mentor, cls_advisor } = req.body;
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: 'User already exists' });
+        }
+
+        // Create new user with plain text password (as per your current setup)
+        const user = new User({
+            name,
+            email,
+            password,
+            role
+        });
+
+        // If creating a student, handle mentor and class advisor relationships
+        if (role === 'student' && (mentor || cls_advisor)) {
+            if (mentor) {
+                const mentorUser = await User.findById(mentor);
+                if (!mentorUser || mentorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid mentor selected' });
+                }
+                user.mentor = mentor;
+                // Add student to mentor's mentees array
+                mentorUser.mentees.push(user._id);
+                await mentorUser.save();
+            }
+
+            if (cls_advisor) {
+                const advisorUser = await User.findById(cls_advisor);
+                if (!advisorUser || advisorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid class advisor selected' });
+                }
+                user.cls_advisor = cls_advisor;
+                // Add student to advisor's class_students array
+                advisorUser.class_students.push(user._id);
+                await advisorUser.save();
+            }
+        }
+
+        await user.save();
+
+        // Return user without password
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.status(201).json({ 
+            message: 'User created successfully',
+            user: userResponse
+        });
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Delete user (admin only)
+app.delete('/api/users/:id', isAdmin, async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const adminId = decoded.userId;
+
+        // Check if trying to delete own account
+        if (adminId === req.params.id) {
+            return res.status(403).json({ message: 'Admins cannot delete their own account' });
+        }
+
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        await user.deleteOne();
+        res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
