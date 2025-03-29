@@ -27,9 +27,10 @@ const Schema = new mongoose.Schema({
     email: { type: String, unique: true, required: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['student', 'teacher', 'admin'], required: true },
+    roll_no: { type: String, required: function() { return this.role === 'student'; }, unique: true },
 
     // Relationships
-    class_students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    cls_students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     mentees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // For teachers
     mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },   // For students
     cls_advisor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // For students
@@ -45,8 +46,6 @@ module.exports = User;
 
 
 //const User = mongoose.model('users', userSchema);
-
-// const User = mongoose.model('users', UserSchema);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -97,6 +96,45 @@ async function checkUsers() {
 //     }
 // });
 let uemail = "";
+// 🔹 GET STUDENT PROFILE
+app.get('/api/student/profile', async (req, res) => {
+    try {
+        console.log("before try");
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ message: 'No token provided' });
+        }
+        console.log("after try");
+        
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const student = await User.findById(decoded.userId)
+            .populate('mentor', 'name')
+            .populate('cls_advisor', 'name');
+        console.log('Student data from DB:', student);
+
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+        console.log(student.roll_no);
+        res.json({
+            success: true,
+            profile: {
+                id: student._id,
+                name: student.name,
+                email: student.email,
+                role: student.role,
+                roll_no: student.roll_no,
+                mentor: student.mentor?.name || 'Not assigned',
+                cls_advisor: student.cls_advisor?.name || 'Not assigned'
+            }
+        });
+    } catch (error) {
+        console.error('Get student profile error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // 🔹 USER LOGIN
 app.post('/api/login', async (req, res) => {
     try {
@@ -118,7 +156,7 @@ app.post('/api/login', async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
-
+        
         res.json({
             token,
             user: {
@@ -147,6 +185,70 @@ const transporter = nodemailer.createTransport({
 });
 
 // 🔹 FORGOT PASSWORD - Generate Reset Token
+// app.post('/api/forgot-password', async (req, res) => {
+//     try {
+//         const { email } = req.body;
+//         const user = await User.findOne({ email });
+
+//         if (!user) {
+//             return res.status(404).json({ message: 'User not found' });
+//         }
+
+//         const resetToken = jwt.sign(
+//             { userId: user._id },
+//             process.env.JWT_SECRET,
+//             { expiresIn: '1h' }
+//         );
+//         user.resetPasswordToken = resetToken;
+//         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+
+//         await user.save();
+
+//         // Here you would typically send an email with the reset token
+//         // For now, we'll just return the token
+//         res.json({ message: 'Password reset token sent', token: resetToken });
+//     } catch (error) {
+//         console.error('Forgot password error:', error);
+//         res.status(500).json({ message: 'Server error' });
+//     }
+// });
+
+// // 🔹 RESET PASSWORD - Validate Token & Set New Password
+// app.post('/api/reset-password', async (req, res) => {
+//     try {
+//         const { token, newPassword } = req.body;
+
+//         const user = await User.findOne({
+//             resetPasswordToken: token,
+//             resetPasswordExpires: { $gt: Date.now() }
+//         });
+
+//         if (!user) {
+//             return res.status(400).json({ message: 'Invalid or expired reset token' });
+//         }
+
+//         const salt = await bcrypt.genSalt(10);
+//         user.password = await bcrypt.hash(newPassword, salt);
+//         user.resetPasswordToken = undefined;
+//         user.resetPasswordExpires = undefined;
+
+//         await user.save();
+
+//         res.json({ message: 'Password has been reset' });
+//     } catch (error) {
+//         console.error('Reset password error:', error);
+//         res.status(500).json({ message: 'Server error' });
+//     }
+// });
+
+// // 🔹 ERROR HANDLING MIDDLEWARE
+// app.use((err, req, res, next) => {
+//     console.error('❌ Error:', err.stack);
+//     res.status(500).json({ message: 'Something went wrong!' });
+// });
+// Replace the existing forgot password and reset password endpoints with these:
+
+// 🔹 FORGOT PASSWORD - Generate and Send OTP
 app.post('/api/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
@@ -156,58 +258,106 @@ app.post('/api/forgot-password', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const resetToken = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
+        // Generate a 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = Date.now() + 600000; // 10 minutes
+
+        // Save OTP and expiry to user document
+        await User.findOneAndUpdate(
+            { _id: user._id },
+            { 
+                resetPasswordToken: otp,
+                resetPasswordExpires: otpExpiry
+            },
+            { new: true, runValidators: false }
         );
-        user.resetPasswordToken = resetToken;
-        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
 
-        await user.save();
+        // Send OTP via email
+        await transporter.sendMail({
+            to: email,
+            subject: 'Password Reset OTP',
+            text: `Your OTP for password reset is: ${otp}\nThis OTP will expire in 10 minutes.`
+        });
 
-        // Here you would typically send an email with the reset token
-        // For now, we'll just return the token
-        res.json({ message: 'Password reset token sent', token: resetToken });
+        res.json({ message: 'OTP sent to your email' });
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// 🔹 RESET PASSWORD - Validate Token & Set New Password
-app.post('/api/reset-password', async (req, res) => {
+// 🔹 VERIFY OTP
+app.post('/api/verify-otp', async (req, res) => {
     try {
-        const { token, newPassword } = req.body;
-
+        const { email, otp } = req.body;
         const user = await User.findOne({
-            resetPasswordToken: token,
+            email,
+            resetPasswordToken: otp,
             resetPasswordExpires: { $gt: Date.now() }
         });
 
         if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired OTP' });
+        }
+
+        // Generate reset token for password reset
+        const resetToken = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+
+        res.json({
+            message: 'OTP verified successfully',
+            resetToken
+        });
+    } catch (error) {
+        console.error('OTP verification error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+// 🔹 RESET PASSWORD - With Verified OTP
+app.post('/api/reset-password', async (req, res) => {
+    try {
+        const { resetToken, newPassword } = req.body;
+
+        // Verify the JWT token
+        let decoded;
+        try {
+            decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+        } catch (err) {
             return res.status(400).json({ message: 'Invalid or expired reset token' });
         }
 
+        // Update user with new password and clear reset token fields
         const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpires = undefined;
+        //const hashedPassword = await bcrypt.hash(newPassword, salt);
+        
+        const updatedUser = await User.findOneAndUpdate(
+            { _id: decoded.userId },
+            {
+                password: newPassword,
+                $unset: {
+                    resetPasswordToken: 1,
+                    resetPasswordExpires: 1
+                }
+            },
+            { new: true, runValidators: false }
+        );
 
-        await user.save();
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
 
-        res.json({ message: 'Password has been reset' });
+        res.json({ message: 'Password has been reset successfully' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// 🔹 ERROR HANDLING MIDDLEWARE
-app.use((err, req, res, next) => {
-    console.error('❌ Error:', err.stack);
-    res.status(500).json({ message: 'Something went wrong!' });
-});
 
 // Add these imports at the top of your file
 const multer = require('multer');
@@ -478,3 +628,622 @@ app.patch('/api/od-applications/:id/files', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+// Add these endpoints after your existing routes
+
+// Add this middleware function for token authentication
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid or expired token' });
+        }
+        req.user = { id: user.userId, role: user.role };
+        next();
+    });
+};
+
+// Get OD requests from mentees
+app.get('/api/teacher/mentee-requests', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        
+        // Find the teacher to get their mentees list
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        console.log('Teacher ID:', teacherId);
+        console.log('Teacher mentees:', teacher.mentees);
+        
+        // Use mentees array to find OD applications
+        const studentIds = [...(teacher.mentees || [])];
+        
+        console.log('Looking for OD applications with studentIds:', studentIds);
+        
+        // Find all OD applications submitted by the teacher's mentees
+        const odApplications = await ODApplication.find({
+            studentId: { $in: studentIds }
+        });
+        
+        console.log('Found applications:', odApplications);
+        
+        // Get student details for each application
+        const requests = [];
+        for (const app of odApplications) {
+            const student = await User.findById(app.studentId);
+            if (student) {
+                requests.push({
+                    _id: app._id,
+                    name: student.name || 'Unknown',
+                    email: student.email || 'No email',
+                    registerNumber: student.registerNumber || 'N/A',
+                    startDate: app.startDateTime,
+                    endDate: app.endDateTime,
+                    reason: app.description,
+                    class: student.class || 'N/A',
+                    odSubmissionStatus: app.status || 'Pending',
+                    mentorApproval: app.mentorApproval || { status: 'Pending' },
+                    rejectionReason: app.mentorApproval?.remarks || '',
+                    createdAt: app.submissionDate || app.createdAt || new Date(),
+                    file: app.fileUrls && app.fileUrls.length > 0 ? {
+                        name: path.basename(app.fileUrls[0]),
+                        url: app.fileUrls[0]
+                    } : null
+                });
+            }
+        }
+        
+        res.json({ requests });
+    } catch (error) {
+        console.error('Error fetching mentee requests:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Update the approve request endpoint for mentors
+app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        const { requestId } = req.params;
+        
+        // Find the teacher to verify role
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        // Find the OD application
+        const odApplication = await ODApplication.findById(requestId);
+        
+        if (!odApplication) {
+            return res.status(404).json({ message: 'OD application not found' });
+        }
+        
+        // Get all student IDs the teacher is responsible for
+        const studentIds = [...(teacher.mentees || []), ...(teacher.cls_students || [])];
+        
+        // Check if this teacher is authorized to approve this application
+        const studentIdStr = odApplication.studentId.toString();
+        const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
+        
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Not authorized to approve this request' });
+        }
+        
+        // Initialize mentorApproval if it doesn't exist
+        if (!odApplication.mentorApproval) {
+            odApplication.mentorApproval = {};
+        }
+        
+        // Update the mentor approval status
+        odApplication.mentorApproval.status = 'Approved';
+        
+        // Only update overall status to Approved if both mentor and class advisor have approved
+        if (odApplication.mentorApproval.status === 'Approved' && 
+            odApplication.classAdvisorApproval?.status === 'Approved') {
+            odApplication.status = 'Approved';
+        }
+        
+        await odApplication.save();
+        
+        res.json({ message: 'Request approved successfully' });
+    } catch (error) {
+        console.error('Error approving request:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Update the reject request endpoint
+app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        const { requestId } = req.params;
+        const { reason } = req.body;
+        
+        if (!reason) {
+            return res.status(400).json({ message: 'Rejection reason is required' });
+        }
+        
+        // Find the teacher to verify role
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        // Find the OD application
+        const odApplication = await ODApplication.findById(requestId);
+        
+        if (!odApplication) {
+            return res.status(404).json({ message: 'OD application not found' });
+        }
+        
+        // Get all student IDs the teacher is responsible for
+        const studentIds = [...(teacher.mentees || []), ...(teacher.class_students || [])];
+        
+        // Check if this teacher is authorized to reject this application
+        const studentIdStr = odApplication.studentId.toString();
+        const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
+        
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Not authorized to reject this request' });
+        }
+        
+        // Initialize mentorApproval if it doesn't exist
+        if (!odApplication.mentorApproval) {
+            odApplication.mentorApproval = {};
+        }
+        
+        // Update the application status
+        odApplication.mentorApproval.status = 'Rejected';
+        odApplication.mentorApproval.remarks = reason;
+        odApplication.status = 'Rejected'; // Update overall status
+        
+        await odApplication.save();
+        
+        res.json({ message: 'Request rejected successfully' });
+    } catch (error) {
+        console.error('Error rejecting request:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get OD requests for class advisor
+app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        
+        // Find the teacher to get their class students list
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        console.log('Teacher ID:', teacherId);
+        console.log('Teacher class students:', teacher.cls_students);
+        
+        // Initialize studentIds as an empty array if cls_students is undefined
+        const studentIds = [];
+        
+        // Check if cls_students exists and add them to studentIds
+        if (teacher.cls_students && Array.isArray(teacher.cls_students)) {
+            teacher.cls_students.forEach(id => studentIds.push(id));
+        }
+        
+        console.log('Looking for OD applications with studentIds:', studentIds);
+        
+        // Find all OD applications submitted by the teacher's class students
+        // Only show applications that have been approved by the mentor
+        const odApplications = await ODApplication.find({
+            studentId: { $in: studentIds },
+            'mentorApproval.status': 'Approved'
+        });
+        
+        console.log('Found applications:', odApplications);
+        
+        // Get student details for each application
+        const requests = [];
+        for (const app of odApplications) {
+            const student = await User.findById(app.studentId);
+            if (student) {
+                requests.push({
+                    _id: app._id,
+                    name: student.name || 'Unknown',
+                    email: student.email || 'No email',
+                    registerNumber: student.registerNumber || 'N/A',
+                    startDate: app.startDateTime,
+                    endDate: app.endDateTime,
+                    reason: app.description,
+                    class: student.class || 'N/A',
+                    odSubmissionStatus: app.status || 'Pending',
+                    mentorApproval: app.mentorApproval || { status: 'Pending' },
+                    classAdvisorApproval: app.classAdvisorApproval || null,
+                    rejectionReason: app.classAdvisorApproval?.remarks || '',
+                    createdAt: app.submissionDate || app.createdAt || new Date(),
+                    file: app.fileUrls && app.fileUrls.length > 0 ? {
+                        name: path.basename(app.fileUrls[0]),
+                        url: app.fileUrls[0]
+                    } : null
+                });
+            }
+        }
+        
+        res.json({ requests });
+    } catch (error) {
+        console.error('Error fetching class advisor requests:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Class Advisor approve request endpoint
+app.post('/api/teacher/class-advisor-approve/:requestId', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        const { requestId } = req.params;
+        
+        // Find the teacher to verify role
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        // Find the OD application
+        const odApplication = await ODApplication.findById(requestId);
+        
+        if (!odApplication) {
+            return res.status(404).json({ message: 'OD application not found' });
+        }
+        
+        // Check if mentor has already approved
+        if (odApplication.mentorApproval?.status !== 'Approved') {
+            return res.status(400).json({ message: 'Mentor approval is required first' });
+        }
+        
+        // Initialize studentIds as an empty array
+        const studentIds = [];
+        
+        // Check if cls_students exists and add them to studentIds
+        if (teacher.cls_students && Array.isArray(teacher.cls_students)) {
+            teacher.cls_students.forEach(id => studentIds.push(id));
+        }
+        
+        // Check if this teacher is authorized to approve this application
+        const studentIdStr = odApplication.studentId.toString();
+        const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
+        
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Not authorized to approve this request' });
+        }
+        
+        // Initialize classAdvisorApproval if it doesn't exist
+        if (!odApplication.classAdvisorApproval) {
+            odApplication.classAdvisorApproval = {};
+        }
+        
+        // Update the application status
+        odApplication.classAdvisorApproval.status = 'Approved';
+        
+        // Only update overall status to Approved if both mentor and class advisor have approved
+        if (odApplication.mentorApproval.status === 'Approved' && 
+            odApplication.classAdvisorApproval.status === 'Approved') {
+            odApplication.status = 'Approved';
+        }
+        
+        await odApplication.save();
+        
+        res.json({ message: 'Request approved successfully' });
+    } catch (error) {
+        console.error('Error approving request:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Class Advisor reject request endpoint
+app.post('/api/teacher/class-advisor-reject/:requestId', authenticateToken, async (req, res) => {
+    try {
+        const teacherId = req.user.id;
+        const { requestId } = req.params;
+        const { reason } = req.body;
+        
+        if (!reason) {
+            return res.status(400).json({ message: 'Rejection reason is required' });
+        }
+        
+        // Find the teacher to verify role
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
+        }
+        
+        // Find the OD application
+        const odApplication = await ODApplication.findById(requestId);
+        
+        if (!odApplication) {
+            return res.status(404).json({ message: 'OD application not found' });
+        }
+        
+        // Check if mentor has already approved
+        if (odApplication.mentorApproval?.status !== 'Approved') {
+            return res.status(400).json({ message: 'Mentor approval is required first' });
+        }
+        
+        // Get all student IDs the teacher is responsible for as class advisor
+        const studentIds = [...(teacher.cls_students || [])];
+        
+        // Check if this teacher is authorized to reject this application
+        const studentIdStr = odApplication.studentId.toString();
+        const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
+        
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Not authorized to reject this request' });
+        }
+        
+        // Initialize classAdvisorApproval if it doesn't exist
+        if (!odApplication.classAdvisorApproval) {
+            odApplication.classAdvisorApproval = {};
+        }
+        
+        // Update the application status
+        odApplication.classAdvisorApproval.status = 'Rejected';
+        odApplication.classAdvisorApproval.remarks = reason;
+        odApplication.status = 'Rejected'; // Update overall status to Rejected
+        
+        await odApplication.save();
+        
+        res.json({ message: 'Request rejected successfully' });
+    } catch (error) {
+        console.error('Error rejecting request:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+const isAdmin = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Admin access required' });
+        }
+
+        next();
+    } catch (error) {
+        res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
+// Get all users (admin only)
+app.get('/api/users', isAdmin, async (req, res) => {
+    try {
+        const users = await User.find().select('-password');
+        res.json({ users });
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create new user (admin only)
+app.post('/api/users', isAdmin, async (req, res) => {
+    try {
+        const { name, email, password, role, mentor, cls_advisor, roll_no, mentees, cls_students } = req.body;
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: 'User already exists' });
+        }
+
+        // Validate required fields for students
+        if (role === 'student') {
+            if (!mentor || !cls_advisor) {
+                return res.status(400).json({ message: 'Both mentor and class advisor are required for students' });
+            }
+            if (!roll_no) {
+                return res.status(400).json({ message: 'Roll number is required for students' });
+            }
+        }
+
+        // Create new user with plain text password (as per your current setup)
+        const user = new User({
+            name,
+            email,
+            password,
+            role,
+            roll_no: role === 'student' ? roll_no : undefined
+        });
+
+        // If creating a teacher, handle mentees and class students relationships
+        if (role === 'teacher') {
+            // Handle mentees if provided
+            if (mentees && Array.isArray(mentees)) {
+                for (const rollNo of mentees) {
+                    const mentee = await User.findOne({ roll_no: rollNo });
+                    if (!mentee) {
+                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    }
+                    user.mentees.push(mentee._id);
+                }
+            }
+
+            // Handle class students if provided
+            if (cls_students && Array.isArray(cls_students)) {
+                for (const rollNo of cls_students) {
+                    const student = await User.findOne({ roll_no: rollNo });
+                    if (!student) {
+                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    }
+                    user.cls_students.push(student._id);
+                }
+            }
+        }
+
+        // If creating a student, handle mentor and class advisor relationships
+        if (role === 'student') {
+            const mentorUser = await User.findById(mentor);
+            if (!mentorUser || mentorUser.role !== 'teacher') {
+                return res.status(400).json({ message: 'Invalid mentor selected' });
+            }
+            user.mentor = mentor;
+            // Add student to mentor's mentees array
+            mentorUser.mentees.push(user._id);
+            await mentorUser.save();
+
+            const advisorUser = await User.findById(cls_advisor);
+            if (!advisorUser || advisorUser.role !== 'teacher') {
+                return res.status(400).json({ message: 'Invalid class advisor selected' });
+            }
+            user.cls_advisor = cls_advisor;
+            // Add student to advisor's class_students array
+            advisorUser.cls_students.push(user._id);
+            await advisorUser.save();
+        }
+
+        await user.save();
+
+        // Return user without password
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.status(201).json({ 
+            message: 'User created successfully',
+            user: userResponse
+        });
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Delete user (admin only)
+app.delete('/api/users/:id', isAdmin, async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const adminId = decoded.userId;
+
+        // Check if trying to delete own account
+        if (adminId === req.params.id) {
+            return res.status(403).json({ message: 'Admins cannot delete their own account' });
+        }
+
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        await user.deleteOne();
+        res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Update user (admin only)
+app.put('/api/users/:id', isAdmin, async (req, res) => {
+    try {
+        const { name, email, role, mentor, cls_advisor, roll_no, mentees, cls_students } = req.body;
+        const userId = req.params.id;
+
+        // Find the user
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Validate required fields for students
+        if (role === 'student') {
+            if (!mentor || !cls_advisor) {
+                return res.status(400).json({ message: 'Both mentor and class advisor are required for students' });
+            }
+            if (!roll_no) {
+                return res.status(400).json({ message: 'Roll number is required for students' });
+            }
+        }
+
+        // Update basic information
+        user.name = name;
+        user.email = email;
+        user.role = role;
+        if (role === 'student') {
+            user.roll_no = roll_no;
+        }
+
+        // Handle mentor relationship
+        if (user.role === 'student') {
+            // Remove old mentor relationship if exists
+            if (user.mentor) {
+                const oldMentor = await User.findById(user.mentor);
+                if (oldMentor) {
+                    oldMentor.mentees = (oldMentor.mentees || []).filter(id => id.toString() !== userId);
+                    await oldMentor.save();
+                }
+            }
+
+            // Add new mentor relationship if specified
+            if (mentor) {
+                const mentorUser = await User.findById(mentor);
+                if (!mentorUser || mentorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid mentor selected' });
+                }
+                user.mentor = mentor;
+                mentorUser.mentees.push(userId);
+                await mentorUser.save();
+            }
+
+            // Remove old class advisor relationship if exists
+            if (user.cls_advisor) {
+                const oldAdvisor = await User.findById(user.cls_advisor);
+                if (oldAdvisor) {
+                    oldAdvisor.cls_students = (oldAdvisor.cls_students || []).filter(id => id.toString() !== userId);
+                    await oldAdvisor.save();
+                }
+            }
+
+            // Add new class advisor relationship if specified
+            if (cls_advisor) {
+                const advisorUser = await User.findById(cls_advisor);
+                if (!advisorUser || advisorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid class advisor selected' });
+                }
+                user.cls_advisor = cls_advisor;
+                advisorUser.cls_students.push(userId);
+                await advisorUser.save();
+            }
+        }
+
+        await user.save();
+
+        // Return updated user without password
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.json({ 
+            message: 'User updated successfully',
+            user: userResponse
+        });
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
