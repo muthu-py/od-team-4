@@ -595,3 +595,79 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+// Update user (admin only)
+app.put('/api/users/:id', isAdmin, async (req, res) => {
+    try {
+        const { name, email, role, mentor, cls_advisor } = req.body;
+        const userId = req.params.id;
+
+        // Find the user
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update basic information
+        user.name = name;
+        user.email = email;
+        user.role = role;
+
+        // Handle mentor relationship
+        if (user.role === 'student') {
+            // Remove old mentor relationship if exists
+            if (user.mentor) {
+                const oldMentor = await User.findById(user.mentor);
+                if (oldMentor) {
+                    oldMentor.mentees = oldMentor.mentees.filter(id => id.toString() !== userId);
+                    await oldMentor.save();
+                }
+            }
+
+            // Add new mentor relationship if specified
+            if (mentor) {
+                const mentorUser = await User.findById(mentor);
+                if (!mentorUser || mentorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid mentor selected' });
+                }
+                user.mentor = mentor;
+                mentorUser.mentees.push(userId);
+                await mentorUser.save();
+            }
+
+            // Remove old class advisor relationship if exists
+            if (user.cls_advisor) {
+                const oldAdvisor = await User.findById(user.cls_advisor);
+                if (oldAdvisor) {
+                    oldAdvisor.class_students = oldAdvisor.class_students.filter(id => id.toString() !== userId);
+                    await oldAdvisor.save();
+                }
+            }
+
+            // Add new class advisor relationship if specified
+            if (cls_advisor) {
+                const advisorUser = await User.findById(cls_advisor);
+                if (!advisorUser || advisorUser.role !== 'teacher') {
+                    return res.status(400).json({ message: 'Invalid class advisor selected' });
+                }
+                user.cls_advisor = cls_advisor;
+                advisorUser.class_students.push(userId);
+                await advisorUser.save();
+            }
+        }
+
+        await user.save();
+
+        // Return updated user without password
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.json({ 
+            message: 'User updated successfully',
+            user: userResponse
+        });
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});

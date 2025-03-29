@@ -20,14 +20,17 @@ import {
     FormControl,
     InputLabel,
     Box,
-    Alert
+    Alert,
+    IconButton
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
 import axios from 'axios';
 
 const AdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [teachers, setTeachers] = useState([]);
     const [open, setOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [newUser, setNewUser] = useState({
@@ -38,6 +41,7 @@ const AdminDashboard = () => {
         mentor: '',
         cls_advisor: ''
     });
+    const [editingUser, setEditingUser] = useState(null);
 
     useEffect(() => {
         fetchUsers();
@@ -50,7 +54,6 @@ const AdminDashboard = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(response.data.users);
-            // Filter teachers for mentor and class advisor selection
             setTeachers(response.data.users.filter(user => user.role === 'teacher'));
         } catch (error) {
             setError('Failed to fetch users');
@@ -71,11 +74,28 @@ const AdminDashboard = () => {
         });
     };
 
+    const handleEditOpen = (user) => {
+        setEditingUser(user);
+        setEditOpen(true);
+    };
+
+    const handleEditClose = () => {
+        setEditOpen(false);
+        setEditingUser(null);
+    };
+
     const handleChange = (e) => {
-        setNewUser({
-            ...newUser,
-            [e.target.name]: e.target.value
-        });
+        if (editingUser) {
+            setEditingUser({
+                ...editingUser,
+                [e.target.name]: e.target.value
+            });
+        } else {
+            setNewUser({
+                ...newUser,
+                [e.target.name]: e.target.value
+            });
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -90,6 +110,21 @@ const AdminDashboard = () => {
             fetchUsers();
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to create user');
+        }
+    };
+
+    const handleEditSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`http://localhost:5000/api/users/${editingUser._id}`, editingUser, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSuccess('User updated successfully');
+            handleEditClose();
+            fetchUsers();
+        } catch (error) {
+            setError(error.response?.data?.message || 'Failed to update user');
         }
     };
 
@@ -157,6 +192,13 @@ const AdminDashboard = () => {
                                     }
                                 </TableCell>
                                 <TableCell>
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => handleEditOpen(user)}
+                                        sx={{ mr: 1 }}
+                                    >
+                                        <EditIcon />
+                                    </IconButton>
                                     <Button
                                         variant="outlined"
                                         color="error"
@@ -261,6 +303,90 @@ const AdminDashboard = () => {
                     <Button onClick={handleClose}>Cancel</Button>
                     <Button onClick={handleSubmit} variant="contained" color="primary">
                         Create User
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={editOpen} onClose={handleEditClose}>
+                <DialogTitle>Edit User</DialogTitle>
+                <DialogContent>
+                    <Box component="form" onSubmit={handleEditSubmit} sx={{ mt: 2 }}>
+                        <TextField
+                            fullWidth
+                            label="Name"
+                            name="name"
+                            value={editingUser?.name || ''}
+                            onChange={handleChange}
+                            margin="normal"
+                            required
+                        />
+                        <TextField
+                            fullWidth
+                            label="Email"
+                            name="email"
+                            type="email"
+                            value={editingUser?.email || ''}
+                            onChange={handleChange}
+                            margin="normal"
+                            required
+                        />
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Role</InputLabel>
+                            <Select
+                                name="role"
+                                value={editingUser?.role || ''}
+                                onChange={handleChange}
+                                label="Role"
+                            >
+                                <MenuItem value="student">Student</MenuItem>
+                                <MenuItem value="teacher">Teacher</MenuItem>
+                                <MenuItem value="admin">Admin</MenuItem>
+                            </Select>
+                        </FormControl>
+
+                        {editingUser?.role === 'student' && (
+                            <>
+                                <FormControl fullWidth margin="normal">
+                                    <InputLabel>Mentor</InputLabel>
+                                    <Select
+                                        name="mentor"
+                                        value={editingUser?.mentor || ''}
+                                        onChange={handleChange}
+                                        label="Mentor"
+                                    >
+                                        <MenuItem value="">Select Mentor</MenuItem>
+                                        {teachers.map((teacher) => (
+                                            <MenuItem key={teacher._id} value={teacher._id}>
+                                                {teacher.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+
+                                <FormControl fullWidth margin="normal">
+                                    <InputLabel>Class Advisor</InputLabel>
+                                    <Select
+                                        name="cls_advisor"
+                                        value={editingUser?.cls_advisor || ''}
+                                        onChange={handleChange}
+                                        label="Class Advisor"
+                                    >
+                                        <MenuItem value="">Select Class Advisor</MenuItem>
+                                        {teachers.map((teacher) => (
+                                            <MenuItem key={teacher._id} value={teacher._id}>
+                                                {teacher.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </>
+                        )}
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleEditClose}>Cancel</Button>
+                    <Button onClick={handleEditSubmit} variant="contained" color="primary">
+                        Update User
                     </Button>
                 </DialogActions>
             </Dialog>
