@@ -153,18 +153,30 @@ const AdminDashboard = () => {
     const handleDeleteUser = async (userId) => {
         if (window.confirm('Are you sure you want to delete this user?')) {
             try {
+                console.log(userId);
                 const token = localStorage.getItem('token');
+                if (!token) {
+                    setError('Authentication required. Please login again.');
+                    return;
+                }
+
                 const response = await axios.delete(`http://localhost:5000/api/users/${userId}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setSuccess('User deleted successfully');
-                fetchUsers();
+
+                if (response.data.message) {
+                    setSuccess(response.data.message);
+                    await fetchUsers(); // Refresh the user list
+                }
             } catch (error) {
                 if (error.response?.status === 403) {
                     setError('You cannot delete your own admin account');
+                } else if (error.response?.status === 401) {
+                    setError('Authentication required. Please login again.');
                 } else {
                     setError(error.response?.data?.message || 'Failed to delete user');
                 }
+                console.error('Error deleting user:', error);
             }
         }
     };

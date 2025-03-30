@@ -20,7 +20,7 @@ const otpStore = new Map();
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
+        user: process.env.EMAIL,
         pass: process.env.EMAIL_PASSWORD
     }
 });
@@ -430,8 +430,8 @@ const odApplicationSchema = new mongoose.Schema({
     //email: { type: String, required: true , ref : 'User.email'  },
     startDateTime: { type: Date, required: true },
     endDateTime: { type: Date, required: true },
-    startSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
-    endSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
+    startSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
+    endSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
     description: { type: String, required: true },
     fileUrls: [{ type: String }],
     status: { 
@@ -1280,7 +1280,7 @@ app.post('/api/send-otp', async (req, res) => {
 
         // Send email
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: process.env.EMAIL,
             to: email,
             subject: 'Password Reset OTP',
             html: `

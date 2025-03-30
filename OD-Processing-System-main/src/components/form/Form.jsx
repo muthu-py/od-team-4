@@ -122,7 +122,7 @@ export default function Form() {
                     const formattedSubmissions = response.data.applications.map(app => ({
                         startDate: new Date(app.startDateTime).toLocaleDateString(),
                         endDate: new Date(app.endDateTime).toLocaleDateString(),
-                        session: getSession(app.startDateTime),
+                        session: app.startSession.charAt(0).toUpperCase() + app.startSession.slice(1),
                         purpose: app.description.substring(0, 30) + (app.description.length > 30 ? '...' : ''),
                         status: app.status,
                         remarks: getMostRecentRemark(app)
@@ -142,13 +142,6 @@ export default function Form() {
 
         fetchSubmissions();
     }, []);
-
-    // Helper function to determine session (morning/afternoon)
-    const getSession = (dateTimeStr) => {
-        const date = new Date(dateTimeStr);
-        const hours = date.getHours();
-        return hours < 12 ? 'Forenoon' : 'Afternoon';
-    };
 
     // Helper function to get the most recent remark
     const getMostRecentRemark = (application) => {
@@ -287,7 +280,7 @@ export default function Form() {
                 const formattedSubmissions = response.data.applications.map(app => ({
                     startDate: new Date(app.startDateTime).toLocaleDateString(),
                     endDate: new Date(app.endDateTime).toLocaleDateString(),
-                    session: getSession(app.startDateTime),
+                    session: app.startSession.charAt(0).toUpperCase() + app.startSession.slice(1),
                     purpose: app.description.substring(0, 30) + (app.description.length > 30 ? '...' : ''),
                     status: app.status,
                     remarks: getMostRecentRemark(app)
