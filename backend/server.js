@@ -20,7 +20,7 @@ const otpStore = new Map();
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL,
+        user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
     }
 });
@@ -66,13 +66,20 @@ module.exports = User;
 //const User = mongoose.model('users', userSchema);
 
 // MongoDB Connection
+console.log('MongoDB URI:', process.env.MONGODB_URI); // Log the MongoDB URI for debugging
+if (!process.env.MONGODB_URI) {
+    console.error('MongoDB URI is not defined. Please check your .env file.');
+    process.exit(1);
+}
+
 mongoose.connect(process.env.MONGODB_URI, {
+
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
 .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
-    checkUsers();
+    //checkUsers();
 })
 .catch(err => {
     console.error('MongoDB connection error:', err);
@@ -134,7 +141,7 @@ app.get('/api/student/profile', async (req, res) => {
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
-        console.log(student.roll_no);
+        //console.log(student.roll_no);
         res.json({
             success: true,
             profile: {
@@ -300,30 +307,34 @@ app.post('/api/forgot-password', async (req, res) => {
 app.post('/api/verify-otp', async (req, res) => {
     try {
         const { email, otp } = req.body;
-        const user = await User.findOne({
-            email,
-            resetPasswordToken: otp,
-            resetPasswordExpires: { $gt: Date.now() }
-        });
-
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid or expired OTP' });
+        
+        const otpData = otpStore.get(email);
+        if (!otpData) {
+            return res.status(400).json({ message: 'OTP expired or not found' });
         }
 
-        // Generate reset token for password reset
-        const resetToken = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
+        // Check attempts
+        if (otpData.attempts >= 3) {
+            otpStore.delete(email);
+            return res.status(400).json({ message: 'Too many attempts. Please request a new OTP' });
+        }
 
-        res.json({
-            message: 'OTP verified successfully',
-            resetToken
-        });
+        // Check expiry (10 minutes)
+        if (Date.now() - otpData.timestamp > 600000) {
+            otpStore.delete(email);
+            return res.status(400).json({ message: 'OTP expired' });
+        }
+
+        // Verify OTP
+        if (otpData.otp !== otp) {
+            otpData.attempts += 1;
+            return res.status(400).json({ message: 'Invalid OTP' });
+        }
+
+        res.json({ message: 'OTP verified successfully' });
     } catch (error) {
-        console.error('OTP verification error:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error verifying OTP:', error);
+        res.status(500).json({ message: 'Error verifying OTP' });
     }
 });
 
@@ -430,8 +441,8 @@ const odApplicationSchema = new mongoose.Schema({
     //email: { type: String, required: true , ref : 'User.email'  },
     startDateTime: { type: Date, required: true },
     endDateTime: { type: Date, required: true },
-    startSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
-    endSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
+    startSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
+    endSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
     description: { type: String, required: true },
     fileUrls: [{ type: String }],
     status: { 
@@ -1145,6 +1156,7 @@ app.post('/api/users', isAdmin, async (req, res) => {
 
 // Delete user (admin only)
 app.delete('/api/users/:id', isAdmin, async (req, res) => {
+
     try {
         const token = req.headers.authorization?.split(' ')[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -1155,11 +1167,55 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
             return res.status(403).json({ message: 'Admins cannot delete their own account' });
         }
 
-        const user = await User.findById(req.params.id);
+        const user = await User.findById(req.params.id).populate('mentor').populate('cls_advisor');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
+        console.log(user,user.mentor,user.cls_advisor);
 
+        // Handle cascading delete based on user role
+        if (user.role === 'student') {
+            // Remove student from mentor's mentees list if mentor exists
+            if (user.mentor) {
+                await User.findByIdAndUpdate(
+                    user.mentor._id,
+                    { $pull: { mentees: user._id } }
+                );
+            }
+
+            // Remove student from class advisor's cls_students list if advisor exists
+            if (user.cls_advisor) {
+                await User.findByIdAndUpdate(
+                    user.cls_advisor._id,
+                    { $pull: { cls_students: user._id } }
+                );
+            }
+
+            // Delete all OD applications associated with the student
+            await ODApplication.deleteMany({ studentId: user._id });
+        } else if (user.role === 'teacher') {
+            // Update all students who have this teacher as mentor
+            await User.updateMany(
+                { mentor: user._id },
+                { $set: { mentor: null } }
+            );
+
+            // Update all students who have this teacher as class advisor
+            await User.updateMany(
+                { cls_advisor: user._id },
+                { $set: { cls_advisor: null } }
+            );
+
+            // Delete all OD applications where this teacher is involved in approvals
+            await ODApplication.deleteMany({
+                $or: [
+                    { 'mentorApproval.teacherId': user._id },
+                    { 'classAdvisorApproval.teacherId': user._id }
+                ]
+            });
+        }
+
+        // Finally, delete the user
         await user.deleteOne();
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
@@ -1197,9 +1253,9 @@ app.put('/api/users/:id', isAdmin, async (req, res) => {
         if (role === 'student') {
             user.roll_no = roll_no;
         }
-
         // Handle mentor relationship
         if (user.role === 'student') {
+            
             // Remove old mentor relationship if exists
             if (user.mentor) {
                 const oldMentor = await User.findById(user.mentor);
@@ -1280,7 +1336,7 @@ app.post('/api/send-otp', async (req, res) => {
 
         // Send email
         const mailOptions = {
-            from: process.env.EMAIL,
+            from: process.env.EMAIL_USER,
             to: email,
             subject: 'Password Reset OTP',
             html: `
@@ -1297,42 +1353,6 @@ app.post('/api/send-otp', async (req, res) => {
     } catch (error) {
         console.error('Error sending OTP:', error);
         res.status(500).json({ message: 'Error sending OTP' });
-    }
-});
-
-// Verify OTP route
-app.post('/api/verify-otp', async (req, res) => {
-    try {
-        const { email, otp } = req.body;
-        
-        const otpData = otpStore.get(email);
-        if (!otpData) {
-            return res.status(400).json({ message: 'OTP expired or not found' });
-        }
-
-        // Check attempts
-        if (otpData.attempts >= 3) {
-            otpStore.delete(email);
-            return res.status(400).json({ message: 'Too many attempts. Please request a new OTP' });
-        }
-
-        // Check expiry (10 minutes)
-        if (Date.now() - otpData.timestamp > 600000) {
-            otpStore.delete(email);
-            return res.status(400).json({ message: 'OTP expired' });
-        }
-
-        // Verify OTP
-        if (otpData.otp !== otp) {
-            otpData.attempts += 1;
-            return res.status(400).json({ message: 'Invalid OTP' });
-        }
-
-        res.json({ message: 'OTP verified successfully' });
-
-    } catch (error) {
-        console.error('Error verifying OTP:', error);
-        res.status(500).json({ message: 'Error verifying OTP' });
     }
 });
 
@@ -1365,10 +1385,8 @@ app.post('/api/reset-password', async (req, res) => {
         otpStore.delete(email);
 
         res.json({ message: 'Password reset successful' });
-
     } catch (error) {
         console.error('Error resetting password:', error);
         res.status(500).json({ message: 'Error resetting password' });
     }
 });
-

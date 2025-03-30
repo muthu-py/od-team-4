@@ -1156,13 +1156,9 @@ app.post('/api/users', isAdmin, async (req, res) => {
 
 // Delete user (admin only)
 app.delete('/api/users/:id', isAdmin, async (req, res) => {
-    try {
-        console.log("yes");
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) {
-            return res.status(401).json({ message: 'Authentication required' });
-        }
 
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const adminId = decoded.userId;
 
@@ -1171,18 +1167,18 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
             return res.status(403).json({ message: 'Admins cannot delete their own account' });
         }
 
-        const user = await User.findById(req.params.id);
+        const user = await User.findById(req.params.id).populate('mentor').populate('cls_advisor');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        
+        console.log(user,user.mentor,user.cls_advisor);
+
         // Handle cascading delete based on user role
         if (user.role === 'student') {
-            console.log(user,user.mentor,user.cls_advisor);
             // Remove student from mentor's mentees list if mentor exists
             if (user.mentor) {
                 await User.findByIdAndUpdate(
-                    user.mentor,
+                    user.mentor._id,
                     { $pull: { mentees: user._id } }
                 );
             }
@@ -1190,7 +1186,7 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
             // Remove student from class advisor's cls_students list if advisor exists
             if (user.cls_advisor) {
                 await User.findByIdAndUpdate(
-                    user.cls_advisor,
+                    user.cls_advisor._id,
                     { $pull: { cls_students: user._id } }
                 );
             }
@@ -1220,10 +1216,9 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
         }
 
         // Finally, delete the user
-        await User.findByIdAndDelete(req.params.id);
+        await user.deleteOne();
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
-        console.log("yes");
         console.error('Error deleting user:', error);
         res.status(500).json({ message: 'Server error' });
     }
@@ -1313,7 +1308,6 @@ app.put('/api/users/:id', isAdmin, async (req, res) => {
             user: userResponse
         });
     } catch (error) {
-        console.log("yes");
         console.error('Error updating user:', error);
         res.status(500).json({ message: 'Server error' });
     }
