@@ -10,8 +10,13 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors());
+//app.use(cors());
 app.use(express.json());
+
+app.use(cors({
+    origin: 'http://localhost:5173', // or whatever port your Vite app is running on
+    credentials: true
+  }));
 
 // Store OTPs temporarily (in production, use Redis or similar)
 const otpStore = new Map();
@@ -79,7 +84,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 })
 .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
-    checkUsers();
+    //checkUsers();
 })
 .catch(err => {
     console.error('MongoDB connection error:', err);
@@ -141,7 +146,7 @@ app.get('/api/student/profile', async (req, res) => {
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
-        console.log(student.roll_no);
+        //console.log(student.roll_no);
         res.json({
             success: true,
             profile: {
@@ -1390,175 +1395,353 @@ app.post('/api/reset-password', async (req, res) => {
         res.status(500).json({ message: 'Error resetting password' });
     }
 });
-
-// Helper function to calculate date ranges
-const getDateRange = (period) => {
-    const now = new Date();
-    let startDate = new Date();
-    
-    switch(period) {
-        case '7days':
-            startDate.setDate(now.getDate() - 7);
-            break;
-        case '30days':
-            startDate.setDate(now.getDate() - 30);
-            break;
-        case 'year':
-            startDate.setFullYear(now.getFullYear() - 1);
-            break;
-        case 'lifetime':
-            startDate = new Date(0); // Beginning of time
-            break;
-        default:
-            startDate.setDate(now.getDate() - 7); // Default to 7 days
-    }
-    
-    return { startDate, endDate: now };
-};
-
-// Student Report Endpoint
-app.get('/api/reports/student', authenticateToken, async (req, res) => {
+// Get student OD report
+app.get('/api/reports/student', async (req, res) => {
     try {
-        const studentId = req.user.id;
-        const { period = '7days' } = req.query;
-        const { startDate, endDate } = getDateRange(period);
-
-        const applications = await ODApplication.find({
-            studentId,
-            submissionDate: { $gte: startDate, $lte: endDate }
-        });
-
-        const report = {
-            totalSubmitted: applications.length,
-            approved: applications.filter(app => app.status === 'Approved').length,
-            rejected: applications.filter(app => app.status === 'Rejected').length,
-            pending: applications.filter(app => app.status === 'Pending').length,
-            period,
-            startDate,
-            endDate
-        };
-
-        res.json({ report });
-    } catch (error) {
-        console.error('Error generating student report:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Teacher Report Endpoint
-app.get('/api/reports/teacher', authenticateToken, async (req, res) => {
-    try {
-        const teacherId = req.user.id;
-        const { period = '7days' } = req.query;
-        const { startDate, endDate } = getDateRange(period);
-
-        // Get teacher's mentees and class students
-        const teacher = await User.findById(teacherId);
-        if (!teacher || teacher.role !== 'teacher') {
-            return res.status(403).json({ message: 'Not authorized as a teacher' });
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const studentId = decoded.userId;
+  
+      // Get current date
+      const now = new Date();
+      
+      // Calculate date ranges
+      const past7Days = new Date(now);
+      past7Days.setDate(now.getDate() - 7);
+      
+      const past30Days = new Date(now);
+      past30Days.setDate(now.getDate() - 30);
+      
+      const pastYear = new Date(now);
+      pastYear.setFullYear(now.getFullYear() - 1);
+  
+      // Get all applications for this student
+      const allApplications = await ODApplication.find({ studentId });
+      
+      // Filter applications by date ranges
+      const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
+      const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
+      const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
+  
+      // Create report object
+      const report = {
+        past7Days: {
+          total: last7DaysApps.length,
+          approved: last7DaysApps.filter(app => app.status === 'Approved').length,
+          rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
+          pending: last7DaysApps.filter(app => app.status === 'Pending').length
+        },
+        past30Days: {
+          total: last30DaysApps.length,
+          approved: last30DaysApps.filter(app => app.status === 'Approved').length,
+          rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
+          pending: last30DaysApps.filter(app => app.status === 'Pending').length
+        },
+        pastYear: {
+          total: lastYearApps.length,
+          approved: lastYearApps.filter(app => app.status === 'Approved').length,
+          rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
+          pending: lastYearApps.filter(app => app.status === 'Pending').length
+        },
+        lifetime: {
+          total: allApplications.length,
+          approved: allApplications.filter(app => app.status === 'Approved').length,
+          rejected: allApplications.filter(app => app.status === 'Rejected').length,
+          pending: allApplications.filter(app => app.status === 'Pending').length
         }
-
-        const studentIds = [...(teacher.mentees || []), ...(teacher.cls_students || [])];
-
-        // Get applications from mentees
-        const menteeApplications = await ODApplication.find({
-            studentId: { $in: teacher.mentees || [] },
-            submissionDate: { $gte: startDate, $lte: endDate }
-        });
-
-        // Get applications from class students
-        const classStudentApplications = await ODApplication.find({
-            studentId: { $in: teacher.cls_students || [] },
-            submissionDate: { $gte: startDate, $lte: endDate }
-        });
-
-        // Get applications approved/rejected by this teacher
-        const teacherActions = await ODApplication.find({
-            $or: [
-                { 'mentorApproval.teacherId': teacherId },
-                { 'classAdvisorApproval.teacherId': teacherId }
-            ],
-            submissionDate: { $gte: startDate, $lte: endDate }
-        });
-
-        const report = {
-            totalSubmitted: menteeApplications.length + classStudentApplications.length,
-            menteeApplications: {
-                total: menteeApplications.length,
-                approved: menteeApplications.filter(app => app.status === 'Approved').length,
-                rejected: menteeApplications.filter(app => app.status === 'Rejected').length,
-                pending: menteeApplications.filter(app => app.status === 'Pending').length
-            },
-            classStudentApplications: {
-                total: classStudentApplications.length,
-                approved: classStudentApplications.filter(app => app.status === 'Approved').length,
-                rejected: classStudentApplications.filter(app => app.status === 'Rejected').length,
-                pending: classStudentApplications.filter(app => app.status === 'Pending').length
-            },
-            teacherActions: {
-                total: teacherActions.length,
-                approved: teacherActions.filter(app => 
-                    (app.mentorApproval?.teacherId === teacherId && app.mentorApproval.status === 'Approved') ||
-                    (app.classAdvisorApproval?.teacherId === teacherId && app.classAdvisorApproval.status === 'Approved')
-                ).length,
-                rejected: teacherActions.filter(app => 
-                    (app.mentorApproval?.teacherId === teacherId && app.mentorApproval.status === 'Rejected') ||
-                    (app.classAdvisorApproval?.teacherId === teacherId && app.classAdvisorApproval.status === 'Rejected')
-                ).length
-            },
-            period,
-            startDate,
-            endDate
-        };
-
-        res.json({ report });
+      };
+  
+      res.json({ success: true, report });
     } catch (error) {
-        console.error('Error generating teacher report:', error);
-        res.status(500).json({ message: 'Server error' });
+      console.error('Error generating student report:', error);
+      res.status(500).json({ message: 'Server error' });
     }
-});
-
-// Admin Report Endpoint
-app.get('/api/reports/admin', isAdmin, async (req, res) => {
+  });
+  
+  // Get teacher OD report
+  app.get('/api/reports/teacher', async (req, res) => {
     try {
-        const { period = '7days', userId } = req.query;
-        const { startDate, endDate } = getDateRange(period);
-
-        let query = { submissionDate: { $gte: startDate, $lte: endDate } };
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const teacherId = decoded.userId;
+  
+      // Get teacher details
+      const teacher = await User.findById(teacherId);
+      if (!teacher || teacher.role !== 'teacher') {
+        return res.status(403).json({ message: 'Teacher access required' });
+      }
+  
+      // Get current date
+      const now = new Date();
+      
+      // Calculate date ranges
+      const past7Days = new Date(now);
+      past7Days.setDate(now.getDate() - 7);
+      
+      const past30Days = new Date(now);
+      past30Days.setDate(now.getDate() - 30);
+      
+      const pastYear = new Date(now);
+      pastYear.setFullYear(now.getFullYear() - 1);
+  
+      // Get all students mentored by this teacher
+      const menteeIds = teacher.mentees || [];
+      const classStudentIds = teacher.class_students || [];
+      
+      // Get all applications from mentees and class students
+      const menteeApplications = await ODApplication.find({ studentId: { $in: menteeIds } });
+      const classStudentApplications = await ODApplication.find({ studentId: { $in: classStudentIds } });
+      
+      // Filter applications by date ranges
+      const filterByDateRange = (apps, startDate) => {
+        return apps.filter(app => new Date(app.submissionDate) >= startDate);
+      };
+  
+      // Create report object
+      const createReportSection = (menteeApps, classStudentApps) => {
+        return {
+          mentees: {
+            total: menteeApps.length,
+            approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length,
+            rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length,
+            pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length
+          },
+          classStudents: {
+            total: classStudentApps.length,
+            approved: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
+            rejected: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
+            pending: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
+          },
+          combined: {
+            total: menteeApps.length + classStudentApps.length,
+            approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length + 
+                     classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
+            rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length + 
+                     classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
+            pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length + 
+                    classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
+          }
+        };
+      };
+  
+      const report = {
+        past7Days: createReportSection(
+          filterByDateRange(menteeApplications, past7Days),
+          filterByDateRange(classStudentApplications, past7Days)
+        ),
+        past30Days: createReportSection(
+          filterByDateRange(menteeApplications, past30Days),
+          filterByDateRange(classStudentApplications, past30Days)
+        ),
+        pastYear: createReportSection(
+          filterByDateRange(menteeApplications, pastYear),
+          filterByDateRange(classStudentApplications, pastYear)
+        ),
+        lifetime: createReportSection(menteeApplications, classStudentApplications)
+      };
+  
+      res.json({ success: true, report });
+    } catch (error) {
+      console.error('Error generating teacher report:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Get admin OD report
+  app.get('/api/reports/admin', isAdmin, async (req, res) => {
+    try {
+      // Get current date
+      const now = new Date();
+      
+      // Calculate date ranges
+      const past7Days = new Date(now);
+      past7Days.setDate(now.getDate() - 7);
+      
+      const past30Days = new Date(now);
+      past30Days.setDate(now.getDate() - 30);
+      
+      const pastYear = new Date(now);
+      pastYear.setFullYear(now.getFullYear() - 1);
+  
+      // Get all applications
+      const allApplications = await ODApplication.find();
+      
+      // Filter applications by date ranges
+      const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
+      const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
+      const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
+  
+      // Create report object
+      const report = {
+        past7Days: {
+          total: last7DaysApps.length,
+          approved: last7DaysApps.filter(app => app.status === 'Approved').length,
+          rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
+          pending: last7DaysApps.filter(app => app.status === 'Pending').length
+        },
+        past30Days: {
+          total: last30DaysApps.length,
+          approved: last30DaysApps.filter(app => app.status === 'Approved').length,
+          rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
+          pending: last30DaysApps.filter(app => app.status === 'Pending').length
+        },
+        pastYear: {
+          total: lastYearApps.length,
+          approved: lastYearApps.filter(app => app.status === 'Approved').length,
+          rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
+          pending: lastYearApps.filter(app => app.status === 'Pending').length
+        },
+        lifetime: {
+          total: allApplications.length,
+          approved: allApplications.filter(app => app.status === 'Approved').length,
+          rejected: allApplications.filter(app => app.status === 'Rejected').length,
+          pending: allApplications.filter(app => app.status === 'Pending').length
+        }
+      };
+  
+      res.json({ success: true, report });
+    } catch (error) {
+      console.error('Error generating admin report:', error);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+  
+  // Get report for specific user (admin only)
+  app.get('/api/reports/user/:userId', isAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Get user details
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Get current date
+      const now = new Date();
+      
+      // Calculate date ranges
+      const past7Days = new Date(now);
+      past7Days.setDate(now.getDate() - 7);
+      
+      const past30Days = new Date(now);
+      past30Days.setDate(now.getDate() - 30);
+      
+      const pastYear = new Date(now);
+      pastYear.setFullYear(now.getFullYear() - 1);
+  
+      let report = {};
+  
+      if (user.role === 'student') {
+        // Get all applications for this student
+        const allApplications = await ODApplication.find({ studentId: userId });
         
-        // If userId is provided, filter for specific user
-        if (userId) {
-            const user = await User.findById(userId);
-            if (!user) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-            
-            if (user.role === 'student') {
-                query.studentId = userId;
-            } else if (user.role === 'teacher') {
-                query.$or = [
-                    { 'mentorApproval.teacherId': userId },
-                    { 'classAdvisorApproval.teacherId': userId }
-                ];
-            }
-        }
-
-        const applications = await ODApplication.find(query);
-
-        const report = {
-            totalSubmitted: applications.length,
-            approved: applications.filter(app => app.status === 'Approved').length,
-            rejected: applications.filter(app => app.status === 'Rejected').length,
-            pending: applications.filter(app => app.status === 'Pending').length,
-            period,
-            startDate,
-            endDate,
-            userSpecific: !!userId
+        // Filter applications by date ranges
+        const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
+        const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
+        const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
+  
+        report = {
+          userType: 'student',
+          userName: user.name,
+          userEmail: user.email,
+          past7Days: {
+            total: last7DaysApps.length,
+            approved: last7DaysApps.filter(app => app.status === 'Approved').length,
+            rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
+            pending: last7DaysApps.filter(app => app.status === 'Pending').length
+          },
+          past30Days: {
+            total: last30DaysApps.length,
+            approved: last30DaysApps.filter(app => app.status === 'Approved').length,
+            rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
+            pending: last30DaysApps.filter(app => app.status === 'Pending').length
+          },
+          pastYear: {
+            total: lastYearApps.length,
+            approved: lastYearApps.filter(app => app.status === 'Approved').length,
+            rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
+            pending: lastYearApps.filter(app => app.status === 'Pending').length
+          },
+          lifetime: {
+            total: allApplications.length,
+            approved: allApplications.filter(app => app.status === 'Approved').length,
+            rejected: allApplications.filter(app => app.status === 'Rejected').length,
+            pending: allApplications.filter(app => app.status === 'Pending').length
+          }
         };
-
-        res.json({ report });
+      } else if (user.role === 'teacher') {
+        // Get all students mentored by this teacher
+        const menteeIds = user.mentees || [];
+        const classStudentIds = user.class_students || [];
+        
+        // Get all applications from mentees and class students
+        const menteeApplications = await ODApplication.find({ studentId: { $in: menteeIds } });
+        const classStudentApplications = await ODApplication.find({ studentId: { $in: classStudentIds } });
+        
+        // Filter applications by date ranges
+        const filterByDateRange = (apps, startDate) => {
+          return apps.filter(app => new Date(app.submissionDate) >= startDate);
+        };
+  
+        // Create report object
+        const createReportSection = (menteeApps, classStudentApps) => {
+          return {
+            mentees: {
+              total: menteeApps.length,
+              approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length,
+              rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length,
+              pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length
+            },
+            classStudents: {
+              total: classStudentApps.length,
+              approved: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
+              rejected: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
+              pending: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
+            },
+            combined: {
+              total: menteeApps.length + classStudentApps.length,
+              approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length + 
+                       classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
+              rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length + 
+                       classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
+              pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length + 
+                      classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
+            }
+          };
+        };
+  
+        report = {
+          userType: 'teacher',
+          userName: user.name,
+          userEmail: user.email,
+          past7Days: createReportSection(
+            filterByDateRange(menteeApplications, past7Days),
+            filterByDateRange(classStudentApplications, past7Days)
+          ),
+          past30Days: createReportSection(
+            filterByDateRange(menteeApplications, past30Days),
+            filterByDateRange(classStudentApplications, past30Days)
+          ),
+          pastYear: createReportSection(
+            filterByDateRange(menteeApplications, pastYear),
+            filterByDateRange(classStudentApplications, pastYear)
+          ),
+          lifetime: createReportSection(menteeApplications, classStudentApplications)
+        };
+      }
+  
+      res.json({ success: true, report });
     } catch (error) {
-        console.error('Error generating admin report:', error);
-        res.status(500).json({ message: 'Server error' });
+      console.error('Error generating user report:', error);
+      res.status(500).json({ message: 'Server error' });
     }
-});
+  });

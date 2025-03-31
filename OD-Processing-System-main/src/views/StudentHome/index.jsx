@@ -75,6 +75,14 @@ const InfoIcon = styled(Box)(({ theme }) => ({
     justifyContent: 'center',
 }));
 
+// Add this import at the top with other imports
+import StudentReport from '../../components/form/StudentReport';
+
+// Add this to the component, right before the Form component
+<Box sx={{ mb: 4 }}>
+  <StudentReport />
+</Box>
+
 export default function StudentHome() {
     const [studentProfile, setStudentProfile] = useState({
         name: 'Loading...',

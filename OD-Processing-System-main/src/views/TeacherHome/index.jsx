@@ -15,6 +15,8 @@ import BusinessIcon from '@mui/icons-material/Business';
 import PhoneIcon from '@mui/icons-material/Phone';
 import GroupIcon from '@mui/icons-material/Group';
 import SchoolIcon from '@mui/icons-material/School';
+// Add this import at the top with other imports
+import TeacherReport from '../../components/form/TeacherReport';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
     minHeight: '100vh',
@@ -228,3 +230,7 @@ export default function TeacherHome() {
         </StyledContainer>
     );
 }
+// Add this to the component, in an appropriate location
+<Box sx={{ mb: 4 }}>
+  <TeacherReport />
+</Box>
