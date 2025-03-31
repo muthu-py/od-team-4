@@ -8,7 +8,6 @@ import { Grid, Container, Divider } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Badge } from '@mui/material';
 import * as ROUTES from '../../constants/routes';
-import TeacherReport from '../../components/form/TeacherReport';
 
 // Sample teacher profile data
 const teacherProfile = {
@@ -313,7 +312,3 @@ export default function TeacherHome() {
     );
 }
 //when the mentees card is clicks it should point out to mentees.jsx file
-// Add this to the component, in an appropriate location
-<Box sx={{ mb: 4 }}>
-  <TeacherReport />
-</Box>

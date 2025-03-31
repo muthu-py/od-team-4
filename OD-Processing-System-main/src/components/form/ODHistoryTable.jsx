@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Table, 
     TableBody, 
@@ -11,9 +11,20 @@ import {
     Box,
     Typography,
     Card,
-    CardContent
+    CardContent,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Grid,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import axios from 'axios';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
     fontWeight: 600,
@@ -88,7 +99,76 @@ const StyledCard = styled(Card)({
     }
 });
 
+const StatCard = styled(Card)(({ theme }) => ({
+    background: 'linear-gradient(135deg, rgba(26, 35, 126, 0.05) 0%, rgba(26, 35, 126, 0.1) 100%)',
+    borderRadius: '12px',
+    padding: theme.spacing(2),
+    textAlign: 'center',
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        transform: 'translateY(-4px)',
+        boxShadow: '0 4px 20px rgba(26, 35, 126, 0.1)',
+    }
+}));
+
+const FilterContainer = styled(Box)(({ theme }) => ({
+    display: 'flex',
+    gap: theme.spacing(2),
+    marginBottom: theme.spacing(3),
+    alignItems: 'center',
+    flexWrap: 'wrap'
+}));
+
+const StyledFormControl = styled(FormControl)(({ theme }) => ({
+    minWidth: 200,
+    background: 'white',
+    borderRadius: '8px',
+    '& .MuiOutlinedInput-root': {
+        '& fieldset': {
+            borderColor: 'rgba(26, 35, 126, 0.2)',
+        },
+        '&:hover fieldset': {
+            borderColor: 'rgba(26, 35, 126, 0.3)',
+        },
+        '&.Mui-focused fieldset': {
+            borderColor: '#1a237e',
+        },
+    }
+}));
+
 const ODHistoryTable = ({ submissions = [] }) => {
+    const [selectedOD, setSelectedOD] = useState(null);
+    const [openDialog, setOpenDialog] = useState(false);
+    const [timePeriod, setTimePeriod] = useState('lifetime');
+    const [status, setStatus] = useState('all');
+    const [filteredSubmissions, setFilteredSubmissions] = useState(submissions);
+
+    useEffect(() => {
+        fetchSubmissions();
+    }, [timePeriod, status]);
+
+    const fetchSubmissions = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`http://localhost:5000/api/od-applications?timePeriod=${timePeriod}&status=${status}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setFilteredSubmissions(response.data.applications || []);
+        } catch (error) {
+            console.error('Error fetching submissions:', error);
+        }
+    };
+
+    const handleRowClick = (od) => {
+        setSelectedOD(od);
+        setOpenDialog(true);
+    };
+
+    const handleCloseDialog = () => {
+        setOpenDialog(false);
+        setSelectedOD(null);
+    };
+
     const getStatusColor = (status) => {
         switch(status?.toLowerCase()) {
             case 'approved':
@@ -102,24 +182,29 @@ const ODHistoryTable = ({ submissions = [] }) => {
         }
     };
 
-    // Add a function to get the appropriate remarks based on status
-    const getDefaultRemarks = (status, existingRemarks) => {
-        // If there are already specific remarks provided, use those
-        if (existingRemarks && existingRemarks !== 'Under review' && existingRemarks !== 'Request rejected') {
-            return existingRemarks;
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
+    const getSessionDisplay = (startSession, endSession) => {
+        if (startSession === endSession) {
+            return startSession === 'fullday' ? 'Full Day' : 
+                   startSession === 'forenoon' ? 'Forenoon' : 'Afternoon';
         }
-        
-        // Otherwise, provide default remarks based on status
-        switch(status?.toLowerCase()) {
-            case 'approved':
-                return 'Application approved';
-            case 'pending':
-                return 'Under review';
-            case 'rejected':
-                return 'Request rejected';
-            default:
-                return existingRemarks || 'No remarks';
-        }
+        return `${startSession === 'forenoon' ? 'Forenoon' : 'Afternoon'} to ${endSession === 'forenoon' ? 'Forenoon' : 'Afternoon'}`;
+    };
+
+    const handleTimePeriodChange = (event) => {
+        setTimePeriod(event.target.value);
+    };
+
+    const handleStatusChange = (event) => {
+        setStatus(event.target.value);
     };
 
     return (
@@ -160,19 +245,37 @@ const ODHistoryTable = ({ submissions = [] }) => {
                     >
                         Application History
                     </Typography>
-                    <Box sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        backgroundColor: 'rgba(26, 35, 126, 0.05)',
-                        padding: '4px 12px',
-                        borderRadius: '8px',
-                    }}>
-                        <Typography variant="body2" sx={{ color: '#1a237e', fontWeight: 500 }}>
-                            Total Applications: {submissions.length}
-                        </Typography>
-                    </Box>
                 </Box>
+
+                <FilterContainer>
+                    <StyledFormControl>
+                        <InputLabel>Time Period</InputLabel>
+                        <Select
+                            value={timePeriod}
+                            onChange={handleTimePeriodChange}
+                            label="Time Period"
+                        >
+                            <MenuItem value="lifetime">Lifetime</MenuItem>
+                            <MenuItem value="7days">Last 7 Days</MenuItem>
+                            <MenuItem value="30days">Last 30 Days</MenuItem>
+                            <MenuItem value="1year">Last Year</MenuItem>
+                        </Select>
+                    </StyledFormControl>
+
+                    <StyledFormControl>
+                        <InputLabel>Status</InputLabel>
+                        <Select
+                            value={status}
+                            onChange={handleStatusChange}
+                            label="Status"
+                        >
+                            <MenuItem value="all">All Status</MenuItem>
+                            <MenuItem value="Pending">Pending</MenuItem>
+                            <MenuItem value="Approved">Approved</MenuItem>
+                            <MenuItem value="Rejected">Rejected</MenuItem>
+                        </Select>
+                    </StyledFormControl>
+                </FilterContainer>
 
                 <StyledTableContainer>
                     <Table stickyHeader>
@@ -186,7 +289,7 @@ const ODHistoryTable = ({ submissions = [] }) => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {submissions.length === 0 ? (
+                            {filteredSubmissions.length === 0 ? (
                                 <TableRow>
                                     <ContentTableCell 
                                         colSpan={5} 
@@ -214,36 +317,37 @@ const ODHistoryTable = ({ submissions = [] }) => {
                                     </ContentTableCell>
                                 </TableRow>
                             ) : (
-                                submissions.map((submission, index) => (
+                                filteredSubmissions.map((submission, index) => (
                                     <TableRow 
                                         key={index}
+                                        onClick={() => handleRowClick(submission)}
                                         sx={{ 
-                                            // transition: 'all 0.3s ease',
-                                            // '&:hover': { 
-                                            //     backgroundColor: 'rgba(26, 35, 126, 0.02)',
-                                            //     transform: 'translateX(5px)',
-                                            //     '& .MuiTableCell-root': {
-                                            //         color: '#1a237e'
-                                            //     }
-                                            // },
+                                            cursor: 'pointer',
                                             '&:nth-of-type(even)': {
                                                 backgroundColor: 'rgba(26, 35, 126, 0.01)'
+                                            },
+                                            '&:hover': {
+                                                backgroundColor: 'rgba(26, 35, 126, 0.05)'
                                             }
                                         }}
                                     >
                                         <ContentTableCell>
                                             <Box sx={{ fontWeight: 500 }}>
-                                                {submission.startDate}
-                                                {submission.endDate !== submission.startDate && (
-                                                    <Box component="span" sx={{ color: 'rgba(0, 0, 0, 0.4)', mx: 1 }}>
-                                                        to
-                                                    </Box>
+                                                {formatDate(submission.startDateTime)}
+                                                {submission.endDateTime !== submission.startDateTime && (
+                                                    <>
+                                                        <Box component="span" sx={{ color: 'rgba(0, 0, 0, 0.4)', mx: 1 }}>
+                                                            to
+                                                        </Box>
+                                                        {formatDate(submission.endDateTime)}
+                                                    </>
                                                 )}
-                                                {submission.endDate !== submission.startDate && submission.endDate}
                                             </Box>
                                         </ContentTableCell>
-                                        <ContentTableCell>{submission.session}</ContentTableCell>
-                                        <ContentTableCell>{submission.purpose}</ContentTableCell>
+                                        <ContentTableCell>
+                                            {getSessionDisplay(submission.startSession, submission.endSession)}
+                                        </ContentTableCell>
+                                        <ContentTableCell>{submission.description}</ContentTableCell>
                                         <ContentTableCell>
                                             <Chip 
                                                 label={submission.status}
@@ -261,7 +365,11 @@ const ODHistoryTable = ({ submissions = [] }) => {
                                             />
                                         </ContentTableCell>
                                         <ContentTableCell>
-                                            {getDefaultRemarks(submission.status, submission.remarks)}
+                                            {submission.mentorApproval?.remarks || 
+                                             submission.classAdvisorApproval?.remarks || 
+                                             (submission.status === 'Pending' ? 'Under review' : 
+                                              submission.status === 'Approved' ? 'Application approved' : 
+                                              'Request rejected')}
                                         </ContentTableCell>
                                     </TableRow>
                                 ))
@@ -270,6 +378,129 @@ const ODHistoryTable = ({ submissions = [] }) => {
                     </Table>
                 </StyledTableContainer>
             </CardContent>
+
+            {/* Details Dialog */}
+            <Dialog 
+                open={openDialog} 
+                onClose={handleCloseDialog}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle sx={{ 
+                    background: 'linear-gradient(135deg, #1a237e 0%, #0066cc 100%)',
+                    color: 'white',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    OD Application Details
+                    <Button onClick={handleCloseDialog} sx={{ color: 'white' }}>
+                        ✕
+                    </Button>
+                </DialogTitle>
+                <DialogContent sx={{ mt: 2 }}>
+                    {selectedOD && (
+                        <Box sx={{ p: 2 }}>
+                            <Grid container spacing={3}>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                                        Date Range
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ mb: 2 }}>
+                                        {formatDate(selectedOD.startDateTime)}
+                                        {selectedOD.endDateTime !== selectedOD.startDateTime && (
+                                            <>
+                                                <Box component="span" sx={{ mx: 1, color: 'rgba(0, 0, 0, 0.4)' }}>
+                                                    to
+                                                </Box>
+                                                {formatDate(selectedOD.endDateTime)}
+                                            </>
+                                        )}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                                        Session
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ mb: 2 }}>
+                                        {getSessionDisplay(selectedOD.startSession, selectedOD.endSession)}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                                        Purpose
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ mb: 2 }}>
+                                        {selectedOD.description}
+                                    </Typography>
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                                        Status
+                                    </Typography>
+                                    <Chip 
+                                        label={selectedOD.status}
+                                        color={getStatusColor(selectedOD.status)}
+                                        size="small"
+                                        sx={{ 
+                                            minWidth: 85,
+                                            fontWeight: 500,
+                                            borderRadius: '4px',
+                                            textTransform: 'capitalize',
+                                            mb: 2
+                                        }}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+                                        Remarks
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ mb: 2 }}>
+                                        {selectedOD.mentorApproval?.remarks || 
+                                         selectedOD.classAdvisorApproval?.remarks || 
+                                         (selectedOD.status === 'Pending' ? 'Under review' : 
+                                          selectedOD.status === 'Approved' ? 'Application approved' : 
+                                          'Request rejected')}
+                                    </Typography>
+                                </Grid>
+                                {selectedOD.fileUrls && selectedOD.fileUrls.length > 0 && (
+                                    <Grid item xs={12}>
+                                        <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)', mb: 1 }}>
+                                            Attached Files
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                            {selectedOD.fileUrls.map((file, index) => (
+                                                <Button
+                                                    key={index}
+                                                    variant="outlined"
+                                                    size="small"
+                                                    href={file}
+                                                    target="_blank"
+                                                    sx={{
+                                                        borderColor: '#1a237e',
+                                                        color: '#1a237e',
+                                                        '&:hover': {
+                                                            borderColor: '#0066cc',
+                                                            backgroundColor: 'rgba(26, 35, 126, 0.05)'
+                                                        }
+                                                    }}
+                                                >
+                                                    View File {index + 1}
+                                                </Button>
+                                            ))}
+                                        </Box>
+                                    </Grid>
+                                )}
+                            </Grid>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseDialog} sx={{ color: '#1a237e' }}>
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </StyledCard>
     );
 };

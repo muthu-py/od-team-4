@@ -10,13 +10,8 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-//app.use(cors());
+app.use(cors());
 app.use(express.json());
-
-app.use(cors({
-    origin: 'http://localhost:5173', // or whatever port your Vite app is running on
-    credentials: true
-  }));
 
 // Store OTPs temporarily (in production, use Redis or similar)
 const otpStore = new Map();
@@ -25,10 +20,127 @@ const otpStore = new Map();
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
+        user: process.env.EMAIL,
         pass: process.env.EMAIL_PASSWORD
     }
 });
+
+// Email notification functions
+async function sendODRequestNotificationToMentor(student, mentor, odRequest) {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: mentor.email,
+            subject: 'New OD Request Submitted',
+            html: `
+                <h2>New OD Request Notification</h2>
+                <p>Student ${student.name} (${student.roll_no}) has submitted a new OD request.</p>
+                <h3>Request Details:</h3>
+                <ul>
+                    <li>Start Date: ${new Date(odRequest.startDateTime).toLocaleString()}</li>
+                    <li>End Date: ${new Date(odRequest.endDateTime).toLocaleString()}</li>
+                    <li>Description: ${odRequest.description}</li>
+                </ul>
+                <p>Please review the request at your earliest convenience.</p>
+            `
+        };
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending email to mentor:', error);
+    }
+}
+
+async function sendApprovalNotificationToClassAdvisor(student, classAdvisor, odRequest) {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: classAdvisor.email,
+            subject: 'OD Request Approved by Mentor',
+            html: `
+                <h2>OD Request Pending Your Approval</h2>
+                <p>An OD request from student ${student.name} (${student.roll_no}) has been approved by their mentor.</p>
+                <h3>Request Details:</h3>
+                <ul>
+                    <li>Start Date: ${new Date(odRequest.startDateTime).toLocaleString()}</li>
+                    <li>End Date: ${new Date(odRequest.endDateTime).toLocaleString()}</li>
+                    <li>Description: ${odRequest.description}</li>
+                </ul>
+                <p>Please review and provide your approval/rejection.</p>
+            `
+        };
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending email to class advisor:', error);
+    }
+}
+
+async function sendFinalApprovalNotifications(student, odRequest, handlingTeachers) {
+    try {
+        // Email to student
+        const studentMailOptions = {
+            from: process.env.EMAIL,
+            to: student.email,
+            subject: 'OD Request Approved',
+            html: `
+                <h2>Your OD Request has been Approved</h2>
+                <h3>Request Details:</h3>
+                <ul>
+                    <li>Start Date: ${new Date(odRequest.startDateTime).toLocaleString()}</li>
+                    <li>End Date: ${new Date(odRequest.endDateTime).toLocaleString()}</li>
+                    <li>Description: ${odRequest.description}</li>
+                </ul>
+                <p>Your OD request has been approved by both your mentor and class advisor.</p>
+            `
+        };
+        await transporter.sendMail(studentMailOptions);
+
+        // Email to handling teachers
+        for (const teacher of handlingTeachers) {
+            const teacherMailOptions = {
+                from: process.env.EMAIL,
+                to: teacher.email,
+                subject: 'Student OD Request Notification',
+                html: `
+                    <h2>Student OD Request Notification</h2>
+                    <p>Student ${student.name} (${student.roll_no}) will be on OD for the following period:</p>
+                    <ul>
+                        <li>Start Date: ${new Date(odRequest.startDateTime).toLocaleString()}</li>
+                        <li>End Date: ${new Date(odRequest.endDateTime).toLocaleString()}</li>
+                        <li>Description: ${odRequest.description}</li>
+                    </ul>
+                    <p>This request has been approved by both mentor and class advisor.</p>
+                `
+            };
+            await transporter.sendMail(teacherMailOptions);
+        }
+    } catch (error) {
+        console.error('Error sending final approval notifications:', error);
+    }
+}
+
+async function sendRejectionNotification(student, odRequest, rejectedBy, reason) {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: student.email,
+            subject: 'OD Request Rejected',
+            html: `
+                <h2>Your OD Request has been Rejected</h2>
+                <p>Your OD request has been rejected by your ${rejectedBy}.</p>
+                <h3>Request Details:</h3>
+                <ul>
+                    <li>Start Date: ${new Date(odRequest.startDateTime).toLocaleString()}</li>
+                    <li>End Date: ${new Date(odRequest.endDateTime).toLocaleString()}</li>
+                    <li>Description: ${odRequest.description}</li>
+                </ul>
+                <p><strong>Reason for rejection:</strong> ${reason}</p>
+            `
+        };
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending rejection notification:', error);
+    }
+}
 
 // Generate OTP
 function generateOTP() {
@@ -57,6 +169,8 @@ const Schema = new mongoose.Schema({
     mentees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // For teachers
     mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },   // For students
     cls_advisor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // For students
+    handling_teachers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // For students
+    handling_students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // For teachers
 
     // Reset password fields
     resetPasswordToken: String,
@@ -446,8 +560,8 @@ const odApplicationSchema = new mongoose.Schema({
     //email: { type: String, required: true , ref : 'User.email'  },
     startDateTime: { type: Date, required: true },
     endDateTime: { type: Date, required: true },
-    startSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
-    endSession: { type: String, enum: ['forenoon', 'afternoon'], required: true },
+    startSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
+    endSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
     description: { type: String, required: true },
     fileUrls: [{ type: String }],
     status: { 
@@ -548,6 +662,12 @@ app.post('/api/od-applications', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
         
+        // Get student details
+        const student = await User.findById(studentId).populate('mentor');
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+        
         // Extract date and session from the objects
         const startDate = startDateTime && startDateTime.date ? new Date(startDateTime.date) : startDateTime;
         const endDate = endDateTime && endDateTime.date ? new Date(endDateTime.date) : endDateTime;
@@ -557,19 +677,11 @@ app.post('/api/od-applications', async (req, res) => {
         // Ensure fileUrls is an array
         const processedFileUrls = Array.isArray(fileUrls) ? fileUrls : [];
         
-        console.log('Creating OD application with files:', processedFileUrls);
-        
         // Create new OD application
-        console.log(studentId       );  
-        console.log(startDate       );
-        console.log(endDate         );
-        console.log(startSession    );
         const newApplication = new ODApplication({
             studentId,
             startDateTime: startDate,
             endDateTime: endDate,
-            uemail,
-
             startSession,
             endSession,
             description,
@@ -577,7 +689,11 @@ app.post('/api/od-applications', async (req, res) => {
         });
         
         const savedApplication = await newApplication.save();
-        console.log('Saved application:', savedApplication);
+
+        // Send email notification to mentor
+        if (student.mentor) {
+            await sendODRequestNotificationToMentor(student, student.mentor, savedApplication);
+        }
         
         res.status(201).json({ 
             success: true, 
@@ -594,6 +710,7 @@ app.post('/api/od-applications', async (req, res) => {
 app.get('/api/od-applications', async (req, res) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
+        const { timePeriod = 'lifetime', status = 'all' } = req.query;
         
         if (!token) {
             return res.status(401).json({ message: 'Authentication required' });
@@ -603,8 +720,36 @@ app.get('/api/od-applications', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
         
-        // Get all applications for this student
-        const applications = await ODApplication.find({ studentId })
+        // Calculate date range based on time period
+        const now = new Date();
+        let startDate;
+        switch(timePeriod) {
+            case '7days':
+                startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                break;
+            case '30days':
+                startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                break;
+            case '1year':
+                startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+                break;
+            default: // lifetime
+                startDate = new Date(0);
+        }
+
+        // Build query
+        const query = { 
+            studentId,
+            submissionDate: { $gte: startDate }
+        };
+
+        // Add status filter if not 'all'
+        if (status !== 'all') {
+            query.status = status;
+        }
+        
+        // Get all applications for this student with filters
+        const applications = await ODApplication.find(query)
             .sort({ submissionDate: -1 }); // Most recent first
         
         res.json({ applications });
@@ -711,7 +856,7 @@ app.get('/api/teacher/mentee-requests', authenticateToken, async (req, res) => {
                     _id: app._id,
                     name: student.name || 'Unknown',
                     email: student.email || 'No email',
-                    registerNumber: student.registerNumber || 'N/A',
+                    registerNumber: student.roll_no || 'N/A',
                     startDate: app.startDateTime,
                     endDate: app.endDateTime,
                     reason: app.description,
@@ -755,6 +900,15 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
             return res.status(404).json({ message: 'OD application not found' });
         }
         
+        // Get student details
+        const student = await User.findById(odApplication.studentId)
+            .populate('cls_advisor')
+            .populate('handling_teachers');
+        
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+        
         // Get all student IDs the teacher is responsible for
         const studentIds = [...(teacher.mentees || []), ...(teacher.cls_students || [])];
         
@@ -781,6 +935,11 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
         }
         
         await odApplication.save();
+
+        // Send email notification to class advisor
+        if (student.cls_advisor) {
+            await sendApprovalNotificationToClassAdvisor(student, student.cls_advisor, odApplication);
+        }
         
         res.json({ message: 'Request approved successfully' });
     } catch (error) {
@@ -813,6 +972,12 @@ app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req
         if (!odApplication) {
             return res.status(404).json({ message: 'OD application not found' });
         }
+
+        // Get student details
+        const student = await User.findById(odApplication.studentId);
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
         
         // Get all student IDs the teacher is responsible for
         const studentIds = [...(teacher.mentees || []), ...(teacher.class_students || [])];
@@ -836,6 +1001,9 @@ app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req
         odApplication.status = 'Rejected'; // Update overall status
         
         await odApplication.save();
+
+        // Send rejection notification to student
+        await sendRejectionNotification(student, odApplication, 'mentor', reason);
         
         res.json({ message: 'Request rejected successfully' });
     } catch (error) {
@@ -887,7 +1055,7 @@ app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, re
                     _id: app._id,
                     name: student.name || 'Unknown',
                     email: student.email || 'No email',
-                    registerNumber: student.registerNumber || 'N/A',
+                    registerNumber: student.roll_no || 'N/A',
                     startDate: app.startDateTime,
                     endDate: app.endDateTime,
                     reason: app.description,
@@ -936,6 +1104,14 @@ app.post('/api/teacher/class-advisor-approve/:requestId', authenticateToken, asy
         if (odApplication.mentorApproval?.status !== 'Approved') {
             return res.status(400).json({ message: 'Mentor approval is required first' });
         }
+
+        // Get student details with handling teachers
+        const student = await User.findById(odApplication.studentId)
+            .populate('handling_teachers');
+
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
         
         // Initialize studentIds as an empty array
         const studentIds = [];
@@ -965,6 +1141,9 @@ app.post('/api/teacher/class-advisor-approve/:requestId', authenticateToken, asy
         if (odApplication.mentorApproval.status === 'Approved' && 
             odApplication.classAdvisorApproval.status === 'Approved') {
             odApplication.status = 'Approved';
+
+            // Send final approval notifications to student and handling teachers
+            await sendFinalApprovalNotifications(student, odApplication, student.handling_teachers || []);
         }
         
         await odApplication.save();
@@ -1028,6 +1207,9 @@ app.post('/api/teacher/class-advisor-reject/:requestId', authenticateToken, asyn
         odApplication.status = 'Rejected'; // Update overall status to Rejected
         
         await odApplication.save();
+
+        // Send rejection notification to student
+        await sendRejectionNotification(student, odApplication, 'class advisor', reason);
         
         res.json({ message: 'Request rejected successfully' });
     } catch (error) {
@@ -1060,7 +1242,35 @@ const isAdmin = async (req, res, next) => {
 app.get('/api/users', isAdmin, async (req, res) => {
     try {
         const users = await User.find().select('-password');
-        res.json({ users });
+        
+        // For each teacher, get the roll numbers of their students
+        const enhancedUsers = await Promise.all(users.map(async user => {
+            const userObj = user.toObject();
+            
+            if (user.role === 'teacher') {
+                // Get mentees roll numbers
+                if (user.mentees && user.mentees.length > 0) {
+                    const mentees = await User.find({ _id: { $in: user.mentees } }).select('roll_no');
+                    userObj.menteeRollNumbers = mentees.map(mentee => mentee.roll_no);
+                }
+                
+                // Get class students roll numbers
+                if (user.cls_students && user.cls_students.length > 0) {
+                    const classStudents = await User.find({ _id: { $in: user.cls_students } }).select('roll_no');
+                    userObj.classStudentRollNumbers = classStudents.map(student => student.roll_no);
+                }
+                
+                // Get handling students roll numbers
+                if (user.handling_students && user.handling_students.length > 0) {
+                    const handlingStudents = await User.find({ _id: { $in: user.handling_students } }).select('roll_no');
+                    userObj.handlingStudentRollNumbers = handlingStudents.map(student => student.roll_no);
+                }
+            }
+            
+            return userObj;
+        }));
+        
+        res.json({ users: enhancedUsers });
     } catch (error) {
         console.error('Error fetching users:', error);
         res.status(500).json({ message: 'Server error' });
@@ -1070,25 +1280,26 @@ app.get('/api/users', isAdmin, async (req, res) => {
 // Create new user (admin only)
 app.post('/api/users', isAdmin, async (req, res) => {
     try {
-        const { name, email, password, role, mentor, cls_advisor, roll_no, mentees, cls_students } = req.body;
+        const { name, email, password, role, mentor, cls_advisor, roll_no, mentees, cls_students, handling_students } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' });
+            return res.status(400).json({ 
+                success: false,
+                message: 'User already exists with this email' 
+            });
         }
 
-        // Validate required fields for students
-        if (role === 'student') {
-            if (!mentor || !cls_advisor) {
-                return res.status(400).json({ message: 'Both mentor and class advisor are required for students' });
-            }
-            if (!roll_no) {
-                return res.status(400).json({ message: 'Roll number is required for students' });
-            }
+        // Validate role-specific requirements
+        if (role === 'student' && !roll_no) {
+            return res.status(400).json({
+                success: false,
+                message: 'Roll number is required for student users'
+            });
         }
 
-        // Create new user with plain text password (as per your current setup)
+        // Create new user with basic info
         const user = new User({
             name,
             email,
@@ -1097,50 +1308,61 @@ app.post('/api/users', isAdmin, async (req, res) => {
             roll_no: role === 'student' ? roll_no : undefined
         });
 
-        // If creating a teacher, handle mentees and class students relationships
+        // If creating a teacher, handle relationships
         if (role === 'teacher') {
-            // Handle mentees if provided
+            // Initialize empty arrays if not provided
+            user.mentees = [];
+            user.cls_students = [];
+            user.handling_students = [];
+
+            // Handle mentees
             if (mentees && Array.isArray(mentees)) {
                 for (const rollNo of mentees) {
                     const mentee = await User.findOne({ roll_no: rollNo });
-                    if (!mentee) {
-                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    if (mentee) {
+                        user.mentees.push(mentee._id);
+                        mentee.mentor = user._id;
+                        await mentee.save();
                     }
-                    user.mentees.push(mentee._id);
                 }
             }
 
-            // Handle class students if provided
+            // Handle class students
             if (cls_students && Array.isArray(cls_students)) {
                 for (const rollNo of cls_students) {
                     const student = await User.findOne({ roll_no: rollNo });
-                    if (!student) {
-                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    if (student) {
+                        user.cls_students.push(student._id);
+                        student.cls_advisor = user._id;
+                        await student.save();
                     }
-                    user.cls_students.push(student._id);
+                }
+            }
+
+            // Handle handling students
+            if (handling_students && Array.isArray(handling_students)) {
+                for (const rollNo of handling_students) {
+                    const student = await User.findOne({ roll_no: rollNo });
+                    if (student) {
+                        user.handling_students.push(student._id);
+                        if (!student.handling_teachers) {
+                            student.handling_teachers = [];
+                        }
+                        student.handling_teachers.push(user._id);
+                        await student.save();
+                    }
                 }
             }
         }
 
-        // If creating a student, handle mentor and class advisor relationships
+        // If creating a student, handle mentor and class advisor
         if (role === 'student') {
-            const mentorUser = await User.findById(mentor);
-            if (!mentorUser || mentorUser.role !== 'teacher') {
-                return res.status(400).json({ message: 'Invalid mentor selected' });
+            if (mentor) {
+                user.mentor = mentor;
             }
-            user.mentor = mentor;
-            // Add student to mentor's mentees array
-            mentorUser.mentees.push(user._id);
-            await mentorUser.save();
-
-            const advisorUser = await User.findById(cls_advisor);
-            if (!advisorUser || advisorUser.role !== 'teacher') {
-                return res.status(400).json({ message: 'Invalid class advisor selected' });
+            if (cls_advisor) {
+                user.cls_advisor = cls_advisor;
             }
-            user.cls_advisor = cls_advisor;
-            // Add student to advisor's class_students array
-            advisorUser.cls_students.push(user._id);
-            await advisorUser.save();
         }
 
         await user.save();
@@ -1150,12 +1372,17 @@ app.post('/api/users', isAdmin, async (req, res) => {
         delete userResponse.password;
 
         res.status(201).json({ 
+            success: true,
             message: 'User created successfully',
             user: userResponse
         });
     } catch (error) {
         console.error('Error creating user:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error while creating user',
+            error: error.message 
+        });
     }
 });
 
@@ -1232,23 +1459,13 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
 // Update user (admin only)
 app.put('/api/users/:id', isAdmin, async (req, res) => {
     try {
-        const { name, email, role, mentor, cls_advisor, roll_no, mentees, cls_students } = req.body;
+        const { name, email, role, mentor, cls_advisor, roll_no, mentees, cls_students, handling_students } = req.body;
         const userId = req.params.id;
 
         // Find the user
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Validate required fields for students
-        if (role === 'student') {
-            if (!mentor || !cls_advisor) {
-                return res.status(400).json({ message: 'Both mentor and class advisor are required for students' });
-            }
-            if (!roll_no) {
-                return res.status(400).json({ message: 'Roll number is required for students' });
-            }
         }
 
         // Update basic information
@@ -1258,47 +1475,67 @@ app.put('/api/users/:id', isAdmin, async (req, res) => {
         if (role === 'student') {
             user.roll_no = roll_no;
         }
-        // Handle mentor relationship
-        if (user.role === 'student') {
-            
-            // Remove old mentor relationship if exists
-            if (user.mentor) {
-                const oldMentor = await User.findById(user.mentor);
-                if (oldMentor) {
-                    oldMentor.mentees = (oldMentor.mentees || []).filter(id => id.toString() !== userId);
-                    await oldMentor.save();
+
+        if (role === 'teacher') {
+            // Clear existing relationships
+            const oldMentees = [...user.mentees];
+            const oldClsStudents = [...user.cls_students];
+            const oldHandlingStudents = [...user.handling_students];
+
+            user.mentees = [];
+            user.cls_students = [];
+            user.handling_students = [];
+
+            // Remove old relationships
+            await User.updateMany(
+                { _id: { $in: oldMentees } },
+                { $unset: { mentor: 1 } }
+            );
+            await User.updateMany(
+                { _id: { $in: oldClsStudents } },
+                { $unset: { cls_advisor: 1 } }
+            );
+            await User.updateMany(
+                { _id: { $in: oldHandlingStudents } },
+                { $pull: { handling_teachers: userId } }
+            );
+
+            // Set new relationships
+            if (mentees && Array.isArray(mentees)) {
+                for (const rollNo of mentees) {
+                    const mentee = await User.findOne({ roll_no: rollNo });
+                    if (!mentee) {
+                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    }
+                    user.mentees.push(mentee._id);
+                    mentee.mentor = user._id;
+                    await mentee.save();
                 }
             }
 
-            // Add new mentor relationship if specified
-            if (mentor) {
-                const mentorUser = await User.findById(mentor);
-                if (!mentorUser || mentorUser.role !== 'teacher') {
-                    return res.status(400).json({ message: 'Invalid mentor selected' });
-                }
-                user.mentor = mentor;
-                mentorUser.mentees.push(userId);
-                await mentorUser.save();
-            }
-
-            // Remove old class advisor relationship if exists
-            if (user.cls_advisor) {
-                const oldAdvisor = await User.findById(user.cls_advisor);
-                if (oldAdvisor) {
-                    oldAdvisor.cls_students = (oldAdvisor.cls_students || []).filter(id => id.toString() !== userId);
-                    await oldAdvisor.save();
+            if (cls_students && Array.isArray(cls_students)) {
+                for (const rollNo of cls_students) {
+                    const student = await User.findOne({ roll_no: rollNo });
+                    if (!student) {
+                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    }
+                    user.cls_students.push(student._id);
+                    student.cls_advisor = user._id;
+                    await student.save();
                 }
             }
 
-            // Add new class advisor relationship if specified
-            if (cls_advisor) {
-                const advisorUser = await User.findById(cls_advisor);
-                if (!advisorUser || advisorUser.role !== 'teacher') {
-                    return res.status(400).json({ message: 'Invalid class advisor selected' });
+            if (handling_students && Array.isArray(handling_students)) {
+                for (const rollNo of handling_students) {
+                    const student = await User.findOne({ roll_no: rollNo });
+                    if (!student) {
+                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
+                    }
+                    user.handling_students.push(student._id);
+                    student.handling_teachers = student.handling_teachers || [];
+                    student.handling_teachers.push(user._id);
+                    await student.save();
                 }
-                user.cls_advisor = cls_advisor;
-                advisorUser.cls_students.push(userId);
-                await advisorUser.save();
             }
         }
 
@@ -1341,7 +1578,7 @@ app.post('/api/send-otp', async (req, res) => {
 
         // Send email
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: process.env.EMAIL,
             to: email,
             subject: 'Password Reset OTP',
             html: `
@@ -1379,11 +1616,11 @@ app.post('/api/reset-password', async (req, res) => {
         }
 
         // Hash new password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        //const salt = await bcrypt.genSalt(10);
+        //const hashedPassword = await bcrypt.hash(newPassword, salt);
         
         // Update user's password
-        user.password = hashedPassword;
+        user.password = newPassword;
         await user.save();
 
         // Clear OTP
@@ -1395,353 +1632,321 @@ app.post('/api/reset-password', async (req, res) => {
         res.status(500).json({ message: 'Error resetting password' });
     }
 });
-// Get student OD report
-app.get('/api/reports/student', async (req, res) => {
+
+// Get OD statistics for a student
+app.get('/api/od-statistics', async (req, res) => {
     try {
-      const token = req.headers.authorization?.split(' ')[1];
-      if (!token) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
-  
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const studentId = decoded.userId;
-  
-      // Get current date
-      const now = new Date();
-      
-      // Calculate date ranges
-      const past7Days = new Date(now);
-      past7Days.setDate(now.getDate() - 7);
-      
-      const past30Days = new Date(now);
-      past30Days.setDate(now.getDate() - 30);
-      
-      const pastYear = new Date(now);
-      pastYear.setFullYear(now.getFullYear() - 1);
-  
-      // Get all applications for this student
-      const allApplications = await ODApplication.find({ studentId });
-      
-      // Filter applications by date ranges
-      const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
-      const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
-      const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
-  
-      // Create report object
-      const report = {
-        past7Days: {
-          total: last7DaysApps.length,
-          approved: last7DaysApps.filter(app => app.status === 'Approved').length,
-          rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
-          pending: last7DaysApps.filter(app => app.status === 'Pending').length
-        },
-        past30Days: {
-          total: last30DaysApps.length,
-          approved: last30DaysApps.filter(app => app.status === 'Approved').length,
-          rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
-          pending: last30DaysApps.filter(app => app.status === 'Pending').length
-        },
-        pastYear: {
-          total: lastYearApps.length,
-          approved: lastYearApps.filter(app => app.status === 'Approved').length,
-          rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
-          pending: lastYearApps.filter(app => app.status === 'Pending').length
-        },
-        lifetime: {
-          total: allApplications.length,
-          approved: allApplications.filter(app => app.status === 'Approved').length,
-          rejected: allApplications.filter(app => app.status === 'Rejected').length,
-          pending: allApplications.filter(app => app.status === 'Pending').length
+        const token = req.headers.authorization?.split(' ')[1];
+        
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication required' });
         }
-      };
-  
-      res.json({ success: true, report });
+        
+        // Verify token and get user ID
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const studentId = decoded.userId;
+        
+        // Get current date and calculate date ranges
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+        const oneYearAgo = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+        
+        // Get counts for different time periods
+        const [last7Days, last30Days, lastYear, lifetime] = await Promise.all([
+            ODApplication.countDocuments({ 
+                studentId,
+                submissionDate: { $gte: sevenDaysAgo }
+            }),
+            ODApplication.countDocuments({ 
+                studentId,
+                submissionDate: { $gte: thirtyDaysAgo }
+            }),
+            ODApplication.countDocuments({ 
+                studentId,
+                submissionDate: { $gte: oneYearAgo }
+            }),
+            ODApplication.countDocuments({ studentId })
+        ]);
+        
+        res.json({
+            last7Days,
+            last30Days,
+            lastYear,
+            lifetime
+        });
     } catch (error) {
-      console.error('Error generating student report:', error);
-      res.status(500).json({ message: 'Server error' });
+        console.error('Error fetching OD statistics:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-  });
-  
-  // Get teacher OD report
-  app.get('/api/reports/teacher', async (req, res) => {
+});
+
+// Get OD statistics for teachers
+app.get('/api/teacher/od-statistics', authenticateToken, async (req, res) => {
     try {
-      const token = req.headers.authorization?.split(' ')[1];
-      if (!token) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
-  
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const teacherId = decoded.userId;
-  
-      // Get teacher details
-      const teacher = await User.findById(teacherId);
-      if (!teacher || teacher.role !== 'teacher') {
-        return res.status(403).json({ message: 'Teacher access required' });
-      }
-  
-      // Get current date
-      const now = new Date();
-      
-      // Calculate date ranges
-      const past7Days = new Date(now);
-      past7Days.setDate(now.getDate() - 7);
-      
-      const past30Days = new Date(now);
-      past30Days.setDate(now.getDate() - 30);
-      
-      const pastYear = new Date(now);
-      pastYear.setFullYear(now.getFullYear() - 1);
-  
-      // Get all students mentored by this teacher
-      const menteeIds = teacher.mentees || [];
-      const classStudentIds = teacher.class_students || [];
-      
-      // Get all applications from mentees and class students
-      const menteeApplications = await ODApplication.find({ studentId: { $in: menteeIds } });
-      const classStudentApplications = await ODApplication.find({ studentId: { $in: classStudentIds } });
-      
-      // Filter applications by date ranges
-      const filterByDateRange = (apps, startDate) => {
-        return apps.filter(app => new Date(app.submissionDate) >= startDate);
-      };
-  
-      // Create report object
-      const createReportSection = (menteeApps, classStudentApps) => {
-        return {
-          mentees: {
-            total: menteeApps.length,
-            approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length,
-            rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length,
-            pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length
-          },
-          classStudents: {
-            total: classStudentApps.length,
-            approved: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
-            rejected: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
-            pending: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
-          },
-          combined: {
-            total: menteeApps.length + classStudentApps.length,
-            approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length + 
-                     classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
-            rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length + 
-                     classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
-            pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length + 
-                    classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
-          }
-        };
-      };
-  
-      const report = {
-        past7Days: createReportSection(
-          filterByDateRange(menteeApplications, past7Days),
-          filterByDateRange(classStudentApplications, past7Days)
-        ),
-        past30Days: createReportSection(
-          filterByDateRange(menteeApplications, past30Days),
-          filterByDateRange(classStudentApplications, past30Days)
-        ),
-        pastYear: createReportSection(
-          filterByDateRange(menteeApplications, pastYear),
-          filterByDateRange(classStudentApplications, pastYear)
-        ),
-        lifetime: createReportSection(menteeApplications, classStudentApplications)
-      };
-  
-      res.json({ success: true, report });
-    } catch (error) {
-      console.error('Error generating teacher report:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  });
-  
-  // Get admin OD report
-  app.get('/api/reports/admin', isAdmin, async (req, res) => {
-    try {
-      // Get current date
-      const now = new Date();
-      
-      // Calculate date ranges
-      const past7Days = new Date(now);
-      past7Days.setDate(now.getDate() - 7);
-      
-      const past30Days = new Date(now);
-      past30Days.setDate(now.getDate() - 30);
-      
-      const pastYear = new Date(now);
-      pastYear.setFullYear(now.getFullYear() - 1);
-  
-      // Get all applications
-      const allApplications = await ODApplication.find();
-      
-      // Filter applications by date ranges
-      const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
-      const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
-      const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
-  
-      // Create report object
-      const report = {
-        past7Days: {
-          total: last7DaysApps.length,
-          approved: last7DaysApps.filter(app => app.status === 'Approved').length,
-          rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
-          pending: last7DaysApps.filter(app => app.status === 'Pending').length
-        },
-        past30Days: {
-          total: last30DaysApps.length,
-          approved: last30DaysApps.filter(app => app.status === 'Approved').length,
-          rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
-          pending: last30DaysApps.filter(app => app.status === 'Pending').length
-        },
-        pastYear: {
-          total: lastYearApps.length,
-          approved: lastYearApps.filter(app => app.status === 'Approved').length,
-          rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
-          pending: lastYearApps.filter(app => app.status === 'Pending').length
-        },
-        lifetime: {
-          total: allApplications.length,
-          approved: allApplications.filter(app => app.status === 'Approved').length,
-          rejected: allApplications.filter(app => app.status === 'Rejected').length,
-          pending: allApplications.filter(app => app.status === 'Pending').length
+        const teacherId = req.user.id;
+        const { timePeriod = '7days', status, studentType = 'all' } = req.query;
+        
+        // Find the teacher to verify role
+        const teacher = await User.findById(teacherId);
+        
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized as a teacher' });
         }
-      };
-  
-      res.json({ success: true, report });
-    } catch (error) {
-      console.error('Error generating admin report:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  });
-  
-  // Get report for specific user (admin only)
-  app.get('/api/reports/user/:userId', isAdmin, async (req, res) => {
-    try {
-      const { userId } = req.params;
-      
-      // Get user details
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-  
-      // Get current date
-      const now = new Date();
-      
-      // Calculate date ranges
-      const past7Days = new Date(now);
-      past7Days.setDate(now.getDate() - 7);
-      
-      const past30Days = new Date(now);
-      past30Days.setDate(now.getDate() - 30);
-      
-      const pastYear = new Date(now);
-      pastYear.setFullYear(now.getFullYear() - 1);
-  
-      let report = {};
-  
-      if (user.role === 'student') {
-        // Get all applications for this student
-        const allApplications = await ODApplication.find({ studentId: userId });
         
-        // Filter applications by date ranges
-        const last7DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past7Days);
-        const last30DaysApps = allApplications.filter(app => new Date(app.submissionDate) >= past30Days);
-        const lastYearApps = allApplications.filter(app => new Date(app.submissionDate) >= pastYear);
-  
-        report = {
-          userType: 'student',
-          userName: user.name,
-          userEmail: user.email,
-          past7Days: {
-            total: last7DaysApps.length,
-            approved: last7DaysApps.filter(app => app.status === 'Approved').length,
-            rejected: last7DaysApps.filter(app => app.status === 'Rejected').length,
-            pending: last7DaysApps.filter(app => app.status === 'Pending').length
-          },
-          past30Days: {
-            total: last30DaysApps.length,
-            approved: last30DaysApps.filter(app => app.status === 'Approved').length,
-            rejected: last30DaysApps.filter(app => app.status === 'Rejected').length,
-            pending: last30DaysApps.filter(app => app.status === 'Pending').length
-          },
-          pastYear: {
-            total: lastYearApps.length,
-            approved: lastYearApps.filter(app => app.status === 'Approved').length,
-            rejected: lastYearApps.filter(app => app.status === 'Rejected').length,
-            pending: lastYearApps.filter(app => app.status === 'Pending').length
-          },
-          lifetime: {
-            total: allApplications.length,
-            approved: allApplications.filter(app => app.status === 'Approved').length,
-            rejected: allApplications.filter(app => app.status === 'Rejected').length,
-            pending: allApplications.filter(app => app.status === 'Pending').length
-          }
+        // Calculate date range based on time period
+        const now = new Date();
+        let startDate;
+        switch(timePeriod) {
+            case '7days':
+                startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                break;
+            case '30days':
+                startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                break;
+            case '1year':
+                startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+                break;
+            default:
+                startDate = new Date(0); // From beginning of time
+        }
+        
+        // Get student IDs based on student type
+        let studentIds = [];
+        if (studentType === 'mentees') {
+            studentIds = teacher.mentees || [];
+        } else if (studentType === 'class_students') {
+            studentIds = teacher.cls_students || [];
+        } else {
+            studentIds = [...(teacher.mentees || []), ...(teacher.cls_students || [])];
+        }
+        
+        // Build the match query
+        const matchQuery = {
+            studentId: { $in: studentIds },
+            submissionDate: { $gte: startDate }
         };
-      } else if (user.role === 'teacher') {
-        // Get all students mentored by this teacher
-        const menteeIds = user.mentees || [];
-        const classStudentIds = user.class_students || [];
         
-        // Get all applications from mentees and class students
-        const menteeApplications = await ODApplication.find({ studentId: { $in: menteeIds } });
-        const classStudentApplications = await ODApplication.find({ studentId: { $in: classStudentIds } });
+        // Add status filter if provided
+        if (status && status !== 'all') {
+            matchQuery.status = status;
+        }
         
-        // Filter applications by date ranges
-        const filterByDateRange = (apps, startDate) => {
-          return apps.filter(app => new Date(app.submissionDate) >= startDate);
-        };
-  
-        // Create report object
-        const createReportSection = (menteeApps, classStudentApps) => {
-          return {
-            mentees: {
-              total: menteeApps.length,
-              approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length,
-              rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length,
-              pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length
+        // Get statistics
+        const stats = await ODApplication.aggregate([
+            {
+                $match: matchQuery
             },
-            classStudents: {
-              total: classStudentApps.length,
-              approved: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
-              rejected: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
-              pending: classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
-            },
-            combined: {
-              total: menteeApps.length + classStudentApps.length,
-              approved: menteeApps.filter(app => app.mentorApproval.status === 'Approved').length + 
-                       classStudentApps.filter(app => app.classAdvisorApproval.status === 'Approved').length,
-              rejected: menteeApps.filter(app => app.mentorApproval.status === 'Rejected').length + 
-                       classStudentApps.filter(app => app.classAdvisorApproval.status === 'Rejected').length,
-              pending: menteeApps.filter(app => app.mentorApproval.status === 'Pending').length + 
-                      classStudentApps.filter(app => app.classAdvisorApproval.status === 'Pending').length
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: 1 },
+                    approved: {
+                        $sum: {
+                            $cond: [{ $eq: ['$status', 'Approved'] }, 1, 0]
+                        }
+                    },
+                    rejected: {
+                        $sum: {
+                            $cond: [{ $eq: ['$status', 'Rejected'] }, 1, 0]
+                        }
+                    },
+                    pending: {
+                        $sum: {
+                            $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0]
+                        }
+                    }
+                }
             }
-          };
-        };
-  
-        report = {
-          userType: 'teacher',
-          userName: user.name,
-          userEmail: user.email,
-          past7Days: createReportSection(
-            filterByDateRange(menteeApplications, past7Days),
-            filterByDateRange(classStudentApplications, past7Days)
-          ),
-          past30Days: createReportSection(
-            filterByDateRange(menteeApplications, past30Days),
-            filterByDateRange(classStudentApplications, past30Days)
-          ),
-          pastYear: createReportSection(
-            filterByDateRange(menteeApplications, pastYear),
-            filterByDateRange(classStudentApplications, pastYear)
-          ),
-          lifetime: createReportSection(menteeApplications, classStudentApplications)
-        };
-      }
-  
-      res.json({ success: true, report });
+        ]);
+        
+        // Get detailed requests
+        const requests = await ODApplication.find(matchQuery)
+            .populate('studentId', 'name email roll_no')
+            .sort({ submissionDate: -1 });
+        
+        // Format the response
+        const result = stats[0] || { total: 0, approved: 0, rejected: 0, pending: 0 };
+        
+        res.json({
+            statistics: {
+                total: result.total || 0,
+                approved: result.approved || 0,
+                rejected: result.rejected || 0,
+                pending: result.pending || 0
+            },
+            requests: requests.map(req => ({
+                _id: req._id,
+                name: req.studentId?.name || 'Unknown',
+                email: req.studentId?.email || 'No email',
+                registerNumber: req.studentId?.roll_no || 'N/A',
+                startDate: req.startDateTime,
+                endDate: req.endDateTime,
+                reason: req.description,
+                odSubmissionStatus: req.status,
+                mentorApproval: req.mentorApproval,
+                classAdvisorApproval: req.classAdvisorApproval,
+                rejectionReason: req.mentorApproval?.remarks || req.classAdvisorApproval?.remarks || '',
+                createdAt: req.submissionDate,
+                file: req.fileUrls && req.fileUrls.length > 0 ? {
+                    name: path.basename(req.fileUrls[0]),
+                    url: req.fileUrls[0]
+                } : null
+            }))
+        });
     } catch (error) {
-      console.error('Error generating user report:', error);
-      res.status(500).json({ message: 'Server error' });
+        console.error('Error fetching teacher OD statistics:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-  });
+});
+
+// Add this new endpoint for admin statistics
+app.get('/api/admin/od-statistics', isAdmin, async (req, res) => {
+    try {
+        const { timePeriod = '7days', teacherId = 'all', studentId = 'all' } = req.query;
+
+        // Calculate date range based on time period
+        const now = new Date();
+        let startDate;
+        switch(timePeriod) {
+            case '7days':
+                startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                break;
+            case '30days':
+                startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                break;
+            case '1year':
+                startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+                break;
+            default: // lifetime
+                startDate = new Date(0);
+        }
+
+        // Build match query
+        const matchQuery = {
+            submissionDate: { $gte: startDate }
+        };
+
+        // Add student filter if specified
+        if (studentId !== 'all') {
+            matchQuery.studentId = mongoose.Types.ObjectId(studentId);
+        }
+
+        // Get all teachers for the query
+        const teachers = await User.find({ role: 'teacher' });
+        const teacherIds = teachers.map(t => t._id);
+
+        // Get statistics
+        const stats = await ODApplication.aggregate([
+            {
+                $match: matchQuery
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'studentId',
+                    foreignField: '_id',
+                    as: 'student'
+                }
+            },
+            {
+                $unwind: '$student'
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalRequests: { $sum: 1 },
+                    approved: {
+                        $sum: { $cond: [{ $eq: ['$status', 'Approved'] }, 1, 0] }
+                    },
+                    rejected: {
+                        $sum: { $cond: [{ $eq: ['$status', 'Rejected'] }, 1, 0] }
+                    },
+                    pending: {
+                        $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+                    }
+                }
+            }
+        ]);
+
+        // Get teacher-wise statistics if no specific teacher is selected
+        let teacherStats = [];
+        if (teacherId === 'all') {
+            teacherStats = await Promise.all(teachers.map(async (teacher) => {
+                const teacherRequests = await ODApplication.aggregate([
+                    {
+                        $match: {
+                            ...matchQuery,
+                            studentId: { $in: [...teacher.mentees, ...teacher.cls_students] }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            totalHandled: { $sum: 1 },
+                            approved: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Approved'] }, 1, 0] }
+                            },
+                            rejected: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Rejected'] }, 1, 0] }
+                            },
+                            pending: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]);
+
+                return {
+                    teacherId: teacher._id,
+                    teacherName: teacher.name,
+                    teacherEmail: teacher.email,
+                    stats: teacherRequests[0] || { totalHandled: 0, approved: 0, rejected: 0, pending: 0 }
+                };
+            }));
+        } else {
+            // Get statistics for specific teacher
+            const teacher = await User.findById(teacherId);
+            if (teacher) {
+                const teacherRequests = await ODApplication.aggregate([
+                    {
+                        $match: {
+                            ...matchQuery,
+                            studentId: { $in: [...teacher.mentees, ...teacher.cls_students] }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            totalHandled: { $sum: 1 },
+                            approved: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Approved'] }, 1, 0] }
+                            },
+                            rejected: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Rejected'] }, 1, 0] }
+                            },
+                            pending: {
+                                $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]);
+
+                teacherStats = [{
+                    teacherId: teacher._id,
+                    teacherName: teacher.name,
+                    teacherEmail: teacher.email,
+                    stats: teacherRequests[0] || { totalHandled: 0, approved: 0, rejected: 0, pending: 0 }
+                }];
+            }
+        }
+
+        res.json({
+            overall: stats[0] || { totalRequests: 0, approved: 0, rejected: 0, pending: 0 },
+            teacherStats
+        });
+    } catch (error) {
+        console.error('Error fetching admin OD statistics:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});

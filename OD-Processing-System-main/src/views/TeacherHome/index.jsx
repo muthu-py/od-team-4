@@ -4,7 +4,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import CardActionArea from '@mui/material/CardActionArea';
-import { Grid, Container, Divider, Paper } from '@mui/material';
+import { Grid, Container, Divider, Paper, Button, Tabs, Tab, CircularProgress } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Badge } from '@mui/material';
 import * as ROUTES from '../../constants/routes';
@@ -15,8 +15,9 @@ import BusinessIcon from '@mui/icons-material/Business';
 import PhoneIcon from '@mui/icons-material/Phone';
 import GroupIcon from '@mui/icons-material/Group';
 import SchoolIcon from '@mui/icons-material/School';
-// Add this import at the top with other imports
-import TeacherReport from '../../components/form/TeacherReport';
+import axios from 'axios';
+import TeacherCard from '../../components/TeacherCard/TeacherCard';
+import ODStatistics from '../../components/TeacherCard/ODStatistics';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
     minHeight: '100vh',
@@ -113,6 +114,10 @@ export default function TeacherHome() {
         department: 'Loading...',
         phone: 'Loading...'
     });
+    const [activeTab, setActiveTab] = useState(0);
+    const [odRequests, setOdRequests] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         try {
@@ -130,6 +135,53 @@ export default function TeacherHome() {
         }
     }, []);
 
+    useEffect(() => {
+        fetchODRequests();
+    }, []);
+
+    const fetchODRequests = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('http://localhost:5000/api/teacher/mentee-requests', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setOdRequests(response.data.requests || []);
+            setLoading(false);
+        } catch (error) {
+            console.error('Error fetching OD requests:', error);
+            setError('Failed to fetch OD requests');
+            setLoading(false);
+        }
+    };
+
+    const handleApprove = async (requestId) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`http://localhost:5000/api/teacher/approve-request/${requestId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchODRequests();
+        } catch (error) {
+            console.error('Error approving OD request:', error);
+        }
+    };
+
+    const handleReject = async (requestId, reason) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`http://localhost:5000/api/teacher/reject-request/${requestId}`, { reason }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchODRequests();
+        } catch (error) {
+            console.error('Error rejecting OD request:', error);
+        }
+    };
+
+    const handleTabChange = (event, newValue) => {
+        setActiveTab(newValue);
+    };
+
     const cards = [
         {
             id: 1,
@@ -146,6 +198,22 @@ export default function TeacherHome() {
             icon: <SchoolIcon sx={{ fontSize: 28 }} />,
         }
     ];
+
+    if (loading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (error) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                <Typography color="error">{error}</Typography>
+            </Box>
+        );
+    }
 
     return (
         <StyledContainer maxWidth="lg">
@@ -202,7 +270,7 @@ export default function TeacherHome() {
                     </CardContent>
             </ProfileCard>
 
-            <Grid container spacing={4} sx={{ mt: 4 }}>
+            <Grid container spacing={4} sx={{ mt: 4, mb: 4 }}>
                     {cards.map((card) => (
                     <Grid item xs={12} sm={6} key={card.id}>
                         <Link to={card.path} style={{ textDecoration: 'none' }}>
@@ -227,10 +295,48 @@ export default function TeacherHome() {
                         </Grid>
                     ))}
                 </Grid>
+
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                <Tabs value={activeTab} onChange={handleTabChange}>
+                    <Tab label="Statistics" />
+                    <Tab label="Pending Requests" />
+                    <Tab label="All Requests" />
+                </Tabs>
+            </Box>
+
+            {activeTab === 0 && (
+                <ODStatistics />
+            )}
+
+            {activeTab === 1 && (
+                <Grid container spacing={3}>
+                    {odRequests
+                        .filter(request => request.odSubmissionStatus === 'Pending')
+                        .map(request => (
+                            <Grid item xs={12} key={request._id}>
+                                <TeacherCard
+                                    request={request}
+                                    onApprove={() => handleApprove(request._id)}
+                                    onReject={(reason) => handleReject(request._id, reason)}
+                                />
+                            </Grid>
+                        ))}
+                </Grid>
+            )}
+
+            {activeTab === 2 && (
+                <Grid container spacing={3}>
+                    {odRequests.map(request => (
+                        <Grid item xs={12} key={request._id}>
+                            <TeacherCard
+                                request={request}
+                                onApprove={() => handleApprove(request._id)}
+                                onReject={(reason) => handleReject(request._id, reason)}
+                            />
+                        </Grid>
+                    ))}
+                </Grid>
+            )}
         </StyledContainer>
     );
 }
-// Add this to the component, in an appropriate location
-<Box sx={{ mb: 4 }}>
-  <TeacherReport />
-</Box>
