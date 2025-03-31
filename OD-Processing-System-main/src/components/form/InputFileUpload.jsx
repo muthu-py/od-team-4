@@ -12,7 +12,8 @@ import {
   DialogContent,
   DialogTitle,
   DialogActions,
-  CircularProgress
+  CircularProgress,
+  Paper
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -102,19 +103,77 @@ const StyledDialogTitle = styled(DialogTitle)({
   justifyContent: 'space-between',
 });
 
+const DropZone = styled(Paper)(({ theme, isDragActive }) => ({
+  border: `2px dashed ${isDragActive ? '#1a237e' : 'rgba(26, 35, 126, 0.2)'}`,
+  borderRadius: '12px',
+  padding: '40px',
+  textAlign: 'center',
+  background: isDragActive ? 'rgba(26, 35, 126, 0.05)' : 'rgba(255, 255, 255, 0.95)',
+  transition: 'all 0.3s ease',
+  cursor: 'pointer',
+  '&:hover': {
+    borderColor: '#1a237e',
+    background: 'rgba(26, 35, 126, 0.05)',
+  }
+}));
+
+const DropZoneContent = styled(Box)({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '16px',
+});
+
+const DropZoneIcon = styled(CloudUploadIcon)(({ theme }) => ({
+  fontSize: '48px',
+  color: '#1a237e',
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    transform: 'scale(1.1)',
+  }
+}));
+
 export default function InputFileUpload({ onFilesSelected, onUploadError }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [previewFile, setPreviewFile] = useState(null);
   const [openPreview, setOpenPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    setSelectedFiles(files);
+    await uploadFiles(files);
+  };
 
   const handleFileChange = async (event) => {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
     
     setSelectedFiles(files);
-    
-    // Automatically upload files when selected
     await uploadFiles(files);
   };
 
@@ -194,14 +253,38 @@ export default function InputFileUpload({ onFilesSelected, onUploadError }) {
 
   return (
     <Box textAlign="center">
-      <StyledUploadButton
-        component="label"
-        startIcon={uploading ? <CircularProgress size={20} sx={{ color: '#fff' }} /> : <CloudUploadIcon />}
-        disabled={uploading}
+      <DropZone
+        component="div"
+        isDragActive={isDragActive}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById('file-input').click()}
       >
-        {uploading ? 'Uploading...' : 'Upload Files'}
-        <VisuallyHiddenInput type="file" multiple onChange={handleFileChange} disabled={uploading} />
-      </StyledUploadButton>
+        <DropZoneContent>
+          <DropZoneIcon />
+          <Box>
+            <Typography variant="h6" sx={{ color: '#1a237e', mb: 1 }}>
+              {uploading ? 'Uploading...' : 'Drag & Drop Files Here'}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(0, 0, 0, 0.6)' }}>
+              or click to browse
+            </Typography>
+          </Box>
+          <input
+            id="file-input"
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+            disabled={uploading}
+          />
+          {uploading && (
+            <CircularProgress size={24} sx={{ color: '#1a237e' }} />
+          )}
+        </DropZoneContent>
+      </DropZone>
 
       {selectedFiles.length > 0 && (
         <StyledFileList>

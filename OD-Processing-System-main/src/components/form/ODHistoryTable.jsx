@@ -55,26 +55,26 @@ const ContentTableCell = styled(TableCell)({
 
 const StyledTableContainer = styled(TableContainer)({
     borderRadius: '12px',
-    overflow: 'hidden',
+    overflow: 'auto',
     boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
     background: 'rgba(255, 255, 255, 0.95)',
     backdropFilter: 'blur(10px)',
     border: '1px solid rgba(255, 255, 255, 0.2)',
-    height: '520px',
+    height: 'calc(100vh - 300px)',
     '&::-webkit-scrollbar': {
-        width: '8px',
-        height: '8px',
+        width: '10px',
+        height: '10px',
     },
     '&::-webkit-scrollbar-track': {
         background: 'rgba(0, 0, 0, 0.05)',
-        borderRadius: '4px',
+        borderRadius: '5px',
     },
     '&::-webkit-scrollbar-thumb': {
-        background: 'rgba(26, 35, 126, 0.2)',
-        borderRadius: '4px',
-        // '&:hover': {
-        //     background: 'rgba(26, 35, 126, 0.3)',
-        // },
+        background: 'rgba(26, 35, 126, 0.3)',
+        borderRadius: '5px',
+        '&:hover': {
+            background: 'rgba(26, 35, 126, 0.5)',
+        },
     },
 });
 
@@ -281,18 +281,19 @@ const ODHistoryTable = ({ submissions = [] }) => {
                     <Table stickyHeader>
                         <TableHead>
                             <TableRow>
-                                <StyledTableCell width="25%">Date</StyledTableCell>
+                                <StyledTableCell width="8%">S.No</StyledTableCell>
+                                <StyledTableCell width="20%">Date</StyledTableCell>
                                 <StyledTableCell width="15%">Session</StyledTableCell>
                                 <StyledTableCell width="25%">Purpose</StyledTableCell>
                                 <StyledTableCell width="15%">Status</StyledTableCell>
-                                <StyledTableCell width="20%">Remarks</StyledTableCell>
+                                <StyledTableCell width="17%">Remarks</StyledTableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredSubmissions.length === 0 ? (
                                 <TableRow>
                                     <ContentTableCell 
-                                        colSpan={5} 
+                                        colSpan={6} 
                                         align="center" 
                                         sx={{ 
                                             py: 8,
@@ -331,6 +332,15 @@ const ODHistoryTable = ({ submissions = [] }) => {
                                             }
                                         }}
                                     >
+                                        <ContentTableCell>
+                                            <Typography sx={{ 
+                                                fontWeight: 500,
+                                                color: '#1a237e',
+                                                textAlign: 'center'
+                                            }}>
+                                                {index + 1}
+                                            </Typography>
+                                        </ContentTableCell>
                                         <ContentTableCell>
                                             <Box sx={{ fontWeight: 500 }}>
                                                 {formatDate(submission.startDateTime)}

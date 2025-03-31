@@ -84,6 +84,12 @@ const StyledDateInput = styled('input')({
     borderRadius: '8px',
     color: '#37474f',
     background: 'rgba(255, 255, 255, 0.9)',
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        borderColor: '#1a237e',
+        background: 'rgba(26, 35, 126, 0.02)',
+        transform: 'translateY(-1px)',
+    },
     '&:focus': {
         outline: 'none',
         borderColor: '#1976d2',
@@ -97,9 +103,18 @@ const StyledSelect = styled(Select)({
         fontSize: '0.95rem',
         borderRadius: '8px',
         background: 'rgba(255, 255, 255, 0.9)',
+        transition: 'all 0.3s ease',
+        '&:hover': {
+            background: 'rgba(26, 35, 126, 0.02)',
+            transform: 'translateY(-1px)',
+        }
     },
     '& .MuiOutlinedInput-notchedOutline': {
         borderColor: 'rgba(0, 0, 0, 0.1)',
+        transition: 'all 0.3s ease',
+    },
+    '&:hover .MuiOutlinedInput-notchedOutline': {
+        borderColor: '#1a237e',
     },
     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
         borderColor: '#1976d2',

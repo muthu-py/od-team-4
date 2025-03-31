@@ -20,6 +20,8 @@ import axios from 'axios';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 
 const StyledForm = styled('form')({
   width: '100%',
@@ -52,16 +54,12 @@ const StyledContainer = styled(Container)({
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
     borderRadius: '16px',
     transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-    // '&:hover': {
-    //   transform: 'translateY(-5px)',
-    //   boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
-    // }
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
   },
   '& .MuiGrid2-root': {
     transition: 'transform 0.3s ease',
-    // '&:hover': {
-    //   transform: 'translateX(5px)',
-    // }
   }
 });
 
@@ -90,6 +88,7 @@ const PageTitle = styled(Typography)({
 // Remove StyledAppBar component
 
 export default function Form() {
+    const [activeTab, setActiveTab] = useState(0);
     const [formData, setFormData] = useState({
         startDateTime: null,
         endDateTime: null,
@@ -309,6 +308,10 @@ export default function Form() {
         }));
     };
 
+    const handleTabChange = (event, newValue) => {
+        setActiveTab(newValue);
+    };
+
     return (
         <Box sx={{
             minHeight: '100vh',
@@ -326,11 +329,12 @@ export default function Form() {
                 pointerEvents: 'none',
             }
         }}>
-            <StyledContainer maxWidth="lg">
+            <StyledContainer maxWidth="lg" sx={{ height: '100%' }}>
                 <Box sx={{ 
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 4,
+                    height: '100%',
                 }}>
                     <PageTitle 
                         variant="h4" 
@@ -350,25 +354,46 @@ export default function Form() {
                             }
                         }} 
                     >
-                        On-Duty Application Form
+                        On-Duty Management
                     </PageTitle>
 
-                    <Box sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' },
-                        gap: 4,
-                        alignItems: 'stretch',
-                        '& > *': {
-                            height: '100%',
-                        }
-                    }}>
-                        {/* OD Form */}
+                    {/* Add Tabs */}
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                        <Tabs 
+                            value={activeTab} 
+                            onChange={handleTabChange}
+                            centered
+                            sx={{
+                                '& .MuiTab-root': {
+                                    textTransform: 'none',
+                                    fontSize: '1.1rem',
+                                    fontWeight: 500,
+                                    color: '#666',
+                                    '&.Mui-selected': {
+                                        color: '#1a237e',
+                                        fontWeight: 600,
+                                    },
+                                },
+                                '& .MuiTabs-indicator': {
+                                    backgroundColor: '#1a237e',
+                                    height: 3,
+                                }
+                            }}
+                        >
+                            <Tab label="OD Submission" />
+                            <Tab label="OD History" />
+                        </Tabs>
+                    </Box>
+
+                    {activeTab === 0 ? (
+                        // OD Submission Form
                         <Card sx={{ 
                             p: 4, 
                             position: 'relative',
                             overflow: 'visible',
                             display: 'flex',
                             flexDirection: 'column',
+                            flex: 1,
                             '&::before': {
                                 content: '""',
                                 position: 'absolute',
@@ -531,30 +556,29 @@ export default function Form() {
 
                                         {/* Submit Button */}
                                         <Grid2 item sx={{ mt: 3 }}>
-                                            <Button 
-                                                type="submit" 
-                                                variant="contained" 
+                                            <Button
+                                                type="submit"
+                                                variant="contained"
                                                 disabled={isLoading}
-                                                sx={{ 
+                                                sx={{
                                                     background: 'linear-gradient(45deg, #1a237e 30%, #0066cc 90%)',
-                                                    py: 2,
-                                                    px: 4,
-                                                    fontSize: '1.1rem',
-                                                    fontWeight: 'bold',
-                                                    letterSpacing: '1px',
+                                                    color: '#fff',
+                                                    padding: '12px 24px',
                                                     borderRadius: '8px',
+                                                    textTransform: 'none',
+                                                    fontSize: '1rem',
+                                                    fontWeight: 500,
                                                     transition: 'all 0.3s ease',
-                                                    boxShadow: '0 4px 20px rgba(26, 35, 126, 0.2)',
-                                                    // '&:hover': {
-                                                    //     background: 'linear-gradient(45deg, #0066cc 30%, #1a237e 90%)',
-                                                    //     transform: 'translateY(-2px)',
-                                                    //     boxShadow: '0 6px 25px rgba(26, 35, 126, 0.3)',
-                                                    // },
+                                                    '&:hover': {
+                                                        background: 'linear-gradient(45deg, #0066cc 30%, #1a237e 90%)',
+                                                        transform: 'translateY(-2px)',
+                                                        boxShadow: '0 6px 25px rgba(26, 35, 126, 0.3)',
+                                                    },
                                                     '&:disabled': {
                                                         background: 'linear-gradient(45deg, #9e9e9e 30%, #757575 90%)',
                                                         boxShadow: 'none',
                                                     }
-                                                }} 
+                                                }}
                                                 fullWidth
                                             >
                                                 {isLoading ? (
@@ -568,10 +592,12 @@ export default function Form() {
                                 </StyledForm>
                             </CardContent>
                         </Card>
-
-                        {/* OD History Table */}
-                        <ODHistoryTable submissions={submissions} />
-                    </Box>
+                    ) : (
+                        // OD History Table
+                        <Box sx={{ flex: 1, minHeight: 0 }}>
+                            <ODHistoryTable submissions={submissions} />
+                        </Box>
+                    )}
                 </Box>
                 
                 {/* Snackbar for notifications */}

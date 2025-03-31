@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import PopupReject from '../../components/TeacherCard/RejectPopUp';
+import DocumentViewer from '../../components/TeacherCard/DocumentViewer';
 
 // Styled components for better organization
 const InfoLabel = styled(Typography)({
@@ -28,19 +29,47 @@ const InfoLabel = styled(Typography)({
     fontSize: '0.9rem',
     fontWeight: 500,
     display: 'inline-block',
-    width: '140px'
+    width: '140px',
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        color: '#1a237e',
+    }
 });
 
 const InfoValue = styled(Typography)({
     color: '#333',
     fontSize: '0.9rem',
-    display: 'inline-block'
+    display: 'inline-block',
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        color: '#1a237e',
+    }
 });
 
 const InfoRow = styled(Box)({
     marginBottom: '8px',
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        transform: 'translateX(5px)',
+    }
+});
+
+const StyledCard = styled(Card)({
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        transform: 'translateY(-4px)',
+        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+    }
+});
+
+const StyledButton = styled(Button)({
+    transition: 'all 0.3s ease',
+    '&:hover': {
+        transform: 'translateY(-2px)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+    }
 });
 
 export default function Mentees() {
@@ -53,6 +82,8 @@ export default function Mentees() {
     const [snackbarSeverity, setSnackbarSeverity] = useState('info');
     const [rejectPopupOpen, setRejectPopupOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
+    const [selectedDocument, setSelectedDocument] = useState(null);
     const navigate = useNavigate();
 
     // Function to get color based on status
@@ -204,6 +235,16 @@ export default function Mentees() {
         }
     };
 
+    const handleViewDocument = (file) => {
+        setSelectedDocument(file);
+        setDocumentViewerOpen(true);
+    };
+
+    const handleCloseDocumentViewer = () => {
+        setDocumentViewerOpen(false);
+        setSelectedDocument(null);
+    };
+
     // Separate requests into pending and completed
     const pendingRequests = requests.filter(request => 
         !request.mentorApproval || request.mentorApproval.status === 'Pending'
@@ -257,9 +298,28 @@ export default function Mentees() {
                         <Grid container spacing={3}>
                             {pendingRequests.map((request) => (
                                 <Grid item xs={12} md={6} key={request._id}>
-                                    <Card>
+                                    <StyledCard>
                                         <CardContent>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography 
+                                                variant="h6" 
+                                                gutterBottom
+                                                sx={{
+                                                    color: '#1a237e',
+                                                    fontWeight: 600,
+                                                    position: 'relative',
+                                                    pb: 1,
+                                                    '&::after': {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        bottom: 0,
+                                                        left: 0,
+                                                        width: '40px',
+                                                        height: '3px',
+                                                        background: 'linear-gradient(90deg, #1a237e, #0066cc)',
+                                                        borderRadius: '2px',
+                                                    }
+                                                }}
+                                            >
                                                 {request.name}
                                             </Typography>
                                             
@@ -312,14 +372,18 @@ export default function Mentees() {
                                                 <InfoRow>
                                                     <InfoLabel>Attachment:</InfoLabel>
                                                     <InfoValue>
-                                                        <Button 
-                                                            variant="outlined" 
+                                                        <StyledButton
+                                                            variant="outlined"
                                                             size="small"
-                                                            href={request.file.url}
-                                                            target="_blank"
+                                                            onClick={() => handleViewDocument(request.file)}
+                                                            sx={{
+                                                                '&:hover': {
+                                                                    backgroundColor: 'rgba(26, 35, 126, 0.04)',
+                                                                }
+                                                            }}
                                                         >
                                                             View Document
-                                                        </Button>
+                                                        </StyledButton>
                                                     </InfoValue>
                                                 </InfoRow>
                                             )}
@@ -327,23 +391,29 @@ export default function Mentees() {
                                             <Divider sx={{ my: 2 }} />
                                             
                                             <Stack direction="row" spacing={2} justifyContent="flex-end">
-                                                <Button 
-                                                    variant="contained" 
+                                                <StyledButton
+                                                    variant="contained"
                                                     color="primary"
                                                     onClick={() => handleApprove(request._id)}
+                                                    sx={{
+                                                        background: 'linear-gradient(45deg, #1a237e 30%, #0066cc 90%)',
+                                                        '&:hover': {
+                                                            background: 'linear-gradient(45deg, #0066cc 30%, #1a237e 90%)',
+                                                        }
+                                                    }}
                                                 >
                                                     Approve
-                                                </Button>
-                                                <Button 
-                                                    variant="outlined" 
+                                                </StyledButton>
+                                                <StyledButton
+                                                    variant="outlined"
                                                     color="error"
                                                     onClick={() => handleRejectClick(request)}
                                                 >
                                                     Reject
-                                                </Button>
+                                                </StyledButton>
                                             </Stack>
                                         </CardContent>
-                                    </Card>
+                                    </StyledCard>
                                 </Grid>
                             ))}
                         </Grid>
@@ -424,14 +494,18 @@ export default function Mentees() {
                                                 <InfoRow>
                                                     <InfoLabel>Attachment:</InfoLabel>
                                                     <InfoValue>
-                                                        <Button 
-                                                            variant="outlined" 
+                                                        <StyledButton
+                                                            variant="outlined"
                                                             size="small"
-                                                            href={request.file.url}
-                                                            target="_blank"
+                                                            onClick={() => handleViewDocument(request.file)}
+                                                            sx={{
+                                                                '&:hover': {
+                                                                    backgroundColor: 'rgba(26, 35, 126, 0.04)',
+                                                                }
+                                                            }}
                                                         >
                                                             View Document
-                                                        </Button>
+                                                        </StyledButton>
                                                     </InfoValue>
                                                 </InfoRow>
                                             )}
@@ -450,6 +524,14 @@ export default function Mentees() {
                 onClose={handleRejectPopupClose}
                 request={selectedRequest}
                 onReject={handleReject}
+            />
+            
+            {/* Document Viewer */}
+            <DocumentViewer
+                open={documentViewerOpen}
+                onClose={handleCloseDocumentViewer}
+                documentUrl={selectedDocument?.url}
+                fileName={selectedDocument?.name}
             />
             
             {/* Snackbar for notifications */}
