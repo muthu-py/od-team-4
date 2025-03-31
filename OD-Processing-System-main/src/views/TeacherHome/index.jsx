@@ -89,7 +89,7 @@ const CardTitle = styled(Typography)(({ theme }) => ({
 }));
 
 const CardDescription = styled(Typography)(({ theme }) => ({
-    color: '#666',
+            color: '#666',
     fontSize: '0.95rem',
 }));
 
@@ -150,14 +150,14 @@ export default function TeacherHome() {
             <DashboardHeader>
                 <Typography variant="h4" component="h1">
                     Teacher Dashboard
-                </Typography>
+                    </Typography>
                 <Divider sx={{ mt: 2, mb: 4, opacity: 0.1 }} />
             </DashboardHeader>
 
             <ProfileCard elevation={0}>
-                <CardContent sx={{ p: 3 }}>
+                    <CardContent sx={{ p: 3 }}>
                     <CardTitle variant="h5" gutterBottom>
-                        Profile Information
+                                Profile Information
                     </CardTitle>
                     <ProfileSection>
                         <ProfileRow>
@@ -197,11 +197,11 @@ export default function TeacherHome() {
                             </Box>
                         </ProfileRow>
                     </ProfileSection>
-                </CardContent>
+                    </CardContent>
             </ProfileCard>
 
             <Grid container spacing={4} sx={{ mt: 4 }}>
-                {cards.map((card) => (
+                    {cards.map((card) => (
                     <Grid item xs={12} sm={6} key={card.id}>
                         <Link to={card.path} style={{ textDecoration: 'none' }}>
                             <ActionCard>
@@ -212,19 +212,19 @@ export default function TeacherHome() {
                                                 {card.icon}
                                             </IconWrapper>
                                             <CardTitle variant="h6">
-                                                {card.title}
+                                                    {card.title}
                                             </CardTitle>
-                                        </Box>
+                                            </Box>
                                         <CardDescription>
-                                            {card.description}
+                                                {card.description}
                                         </CardDescription>
-                                    </CardContent>
-                                </CardActionArea>
+                                        </CardContent>
+                                    </CardActionArea>
                             </ActionCard>
-                        </Link>
-                    </Grid>
-                ))}
-            </Grid>
+                            </Link>
+                        </Grid>
+                    ))}
+                </Grid>
         </StyledContainer>
     );
 }
