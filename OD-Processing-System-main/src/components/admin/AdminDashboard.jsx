@@ -137,12 +137,12 @@ const AdminDashboard = () => {
     };
 
     const handleEditOpen = (user) => {
-        // Convert arrays of IDs to arrays of roll numbers when opening edit dialog
+        // Format the user data for editing
         const editUser = {
             ...user,
-            mentees: user.menteeRollNumbers || [],
-            cls_students: user.classStudentRollNumbers || [],
-            handling_students: user.handlingStudentRollNumbers || []
+            mentees: user.menteeRollNumbers?.join('\n') || '',
+            cls_students: user.classStudentRollNumbers?.join('\n') || '',
+            handling_students: user.handlingStudentRollNumbers?.join('\n') || ''
         };
         setEditingUser(editUser);
         setEditOpen(true);
@@ -242,21 +242,34 @@ const AdminDashboard = () => {
             const token = localStorage.getItem('token');
             const processedUser = { ...editingUser };
             
-            // Process arrays before submission
+            // Process arrays for teacher role
             if (processedUser.role === 'teacher') {
-                processedUser.mentees = processArrayBeforeSubmit(processedUser.mentees);
-                processedUser.cls_students = processArrayBeforeSubmit(processedUser.cls_students);
-                processedUser.handling_students = processArrayBeforeSubmit(processedUser.handling_students);
+                processedUser.menteeRollNumbers = processArrayBeforeSubmit(processedUser.mentees);
+                processedUser.classStudentRollNumbers = processArrayBeforeSubmit(processedUser.cls_students);
+                processedUser.handlingStudentRollNumbers = processArrayBeforeSubmit(processedUser.handling_students);
+                
+                // Remove the original array fields
+                delete processedUser.mentees;
+                delete processedUser.cls_students;
+                delete processedUser.handling_students;
             }
 
-            await axios.put(`http://localhost:5000/api/users/${editingUser._id}`, processedUser, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setSuccess('User updated successfully');
-            handleEditClose();
-            fetchUsers();
+            const response = await axios.put(
+                `http://localhost:5000/api/users/${editingUser._id}`,
+                processedUser,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (response.data.success) {
+                setSuccess('User updated successfully');
+                handleEditClose();
+                fetchUsers();
+            } else {
+                setError(response.data.message || 'Failed to update user');
+            }
         } catch (error) {
-            setError(error.response?.data?.message || 'Failed to update user');
+            console.error('Error updating user:', error);
+            setError(error.response?.data?.message || 'Failed to update user. Please check the input values.');
         }
     };
 
@@ -312,7 +325,7 @@ const AdminDashboard = () => {
                                     </Select>
                                 </FormControl>
                             </Grid>
-                            <Grid item xs={12} md={4}>
+                            {/* <Grid item xs={12} md={4}>
                                 <FormControl fullWidth>
                                     <InputLabel>Teacher</InputLabel>
                                     <Select
@@ -346,6 +359,23 @@ const AdminDashboard = () => {
                                     </Select>
                                 </FormControl>
                             </Grid>
+                            <Grid item xs={12} md={4}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Class Advisor</InputLabel>
+                                    <Select
+                                        value={selectedStudent}
+                                        onChange={(e) => setSelectedStudent(e.target.value)}
+                                        label="Class Advisor"
+                                    >
+                                        <MenuItem value="all">All Class Advisors</MenuItem>
+                                        {teachers.map((teacher) => (
+                                            <MenuItem key={teacher._id} value={teacher._id}>
+                                                {teacher.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid> */}
                         </Grid>
                     </Box>
 
@@ -683,7 +713,7 @@ const AdminDashboard = () => {
                                     fullWidth
                                     label="Mentees (comma-separated roll numbers)"
                                     name="mentees"
-                                    value={editingUser.mentees}
+                                    value={editingUser.mentees || ''}
                                     onChange={(e) => handleArrayChange(e, 'mentees')}
                                     onKeyDown={handleKeyDown}
                                     margin="normal"
@@ -695,7 +725,7 @@ const AdminDashboard = () => {
                                     fullWidth
                                     label="Class Students (comma-separated roll numbers)"
                                     name="cls_students"
-                                    value={editingUser.cls_students}
+                                    value={editingUser.cls_students || ''}
                                     onChange={(e) => handleArrayChange(e, 'cls_students')}
                                     onKeyDown={handleKeyDown}
                                     margin="normal"
@@ -707,7 +737,7 @@ const AdminDashboard = () => {
                                     fullWidth
                                     label="Handling Students (comma-separated roll numbers)"
                                     name="handling_students"
-                                    value={editingUser.handling_students}
+                                    value={editingUser.handling_students || ''}
                                     onChange={(e) => handleArrayChange(e, 'handling_students')}
                                     onKeyDown={handleKeyDown}
                                     margin="normal"

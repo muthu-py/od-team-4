@@ -1456,102 +1456,183 @@ app.delete('/api/users/:id', isAdmin, async (req, res) => {
     }
 });
 
-// Update user (admin only)
-app.put('/api/users/:id', isAdmin, async (req, res) => {
+// Update user endpoint
+app.put('/api/users/:id', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const { name, email, role, mentor, cls_advisor, roll_no, mentees, cls_students, handling_students } = req.body;
         const userId = req.params.id;
+        const updates = req.body;
 
-        // Find the user
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        // Find the existing user
+        const existingUser = await User.findById(userId);
+        if (!existingUser) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
         }
 
-        // Update basic information
-        user.name = name;
-        user.email = email;
-        user.role = role;
-        if (role === 'student') {
-            user.roll_no = roll_no;
+        // Validate required fields
+        if (!updates.name || !updates.email || !updates.role) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Name, email, and role are required fields' 
+            });
         }
 
-        if (role === 'teacher') {
-            // Clear existing relationships
-            const oldMentees = [...user.mentees];
-            const oldClsStudents = [...user.cls_students];
-            const oldHandlingStudents = [...user.handling_students];
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(updates.email)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid email format' 
+            });
+        }
 
-            user.mentees = [];
-            user.cls_students = [];
-            user.handling_students = [];
+        // Check if email is already taken by another user
+        const duplicateEmail = await User.findOne({ 
+            email: updates.email, 
+            _id: { $ne: userId } 
+        });
+        if (duplicateEmail) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Email is already taken' 
+            });
+        }
 
-            // Remove old relationships
-            await User.updateMany(
-                { _id: { $in: oldMentees } },
-                { $unset: { mentor: 1 } }
-            );
-            await User.updateMany(
-                { _id: { $in: oldClsStudents } },
-                { $unset: { cls_advisor: 1 } }
-            );
-            await User.updateMany(
-                { _id: { $in: oldHandlingStudents } },
-                { $pull: { handling_teachers: userId } }
-            );
+        // Handle role-specific updates
+        if (updates.role === 'teacher') {
+            try {
+                // Store old relationships to clean up later
+                const oldMentees = [...(existingUser.mentees || [])];
+                const oldClsStudents = [...(existingUser.cls_students || [])];
+                const oldHandlingStudents = [...(existingUser.handling_students || [])];
 
-            // Set new relationships
-            if (mentees && Array.isArray(mentees)) {
-                for (const rollNo of mentees) {
-                    const mentee = await User.findOne({ roll_no: rollNo });
-                    if (!mentee) {
-                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
-                    }
-                    user.mentees.push(mentee._id);
-                    mentee.mentor = user._id;
-                    await mentee.save();
+                // Reset relationships
+                updates.mentees = [];
+                updates.cls_students = [];
+                updates.handling_students = [];
+
+                // Process mentees
+                if (updates.menteeRollNumbers && Array.isArray(updates.menteeRollNumbers)) {
+                    const menteeRollNumbers = updates.menteeRollNumbers
+                        .filter(roll => roll && roll.trim())
+                        .map(roll => roll.trim());
+
+                    const menteeStudents = await User.find({ 
+                        roll_no: { $in: menteeRollNumbers },
+                        role: 'student'
+                    });
+
+                    // Update mentees array
+                    updates.mentees = menteeStudents.map(student => student._id);
+
+                    // Update mentor reference for each mentee
+                    await User.updateMany(
+                        { _id: { $in: oldMentees } },
+                        { $unset: { mentor: "" } }
+                    );
+                    await User.updateMany(
+                        { _id: { $in: updates.mentees } },
+                        { $set: { mentor: userId } }
+                    );
                 }
-            }
 
-            if (cls_students && Array.isArray(cls_students)) {
-                for (const rollNo of cls_students) {
-                    const student = await User.findOne({ roll_no: rollNo });
-                    if (!student) {
-                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
-                    }
-                    user.cls_students.push(student._id);
-                    student.cls_advisor = user._id;
-                    await student.save();
-                }
-            }
+                // Process class students
+                if (updates.classStudentRollNumbers && Array.isArray(updates.classStudentRollNumbers)) {
+                    const classRollNumbers = updates.classStudentRollNumbers
+                        .filter(roll => roll && roll.trim())
+                        .map(roll => roll.trim());
 
-            if (handling_students && Array.isArray(handling_students)) {
-                for (const rollNo of handling_students) {
-                    const student = await User.findOne({ roll_no: rollNo });
-                    if (!student) {
-                        return res.status(400).json({ message: `Student with roll number ${rollNo} not found` });
-                    }
-                    user.handling_students.push(student._id);
-                    student.handling_teachers = student.handling_teachers || [];
-                    student.handling_teachers.push(user._id);
-                    await student.save();
+                    const classStudents = await User.find({ 
+                        roll_no: { $in: classRollNumbers },
+                        role: 'student'
+                    });
+
+                    // Update class students array
+                    updates.cls_students = classStudents.map(student => student._id);
+
+                    // Update class advisor reference for each student
+                    await User.updateMany(
+                        { _id: { $in: oldClsStudents } },
+                        { $unset: { cls_advisor: "" } }
+                    );
+                    await User.updateMany(
+                        { _id: { $in: updates.cls_students } },
+                        { $set: { cls_advisor: userId } }
+                    );
                 }
+
+                // Process handling students
+                if (updates.handlingStudentRollNumbers && Array.isArray(updates.handlingStudentRollNumbers)) {
+                    const handlingRollNumbers = updates.handlingStudentRollNumbers
+                        .filter(roll => roll && roll.trim())
+                        .map(roll => roll.trim());
+
+                    const handlingStudents = await User.find({ 
+                        roll_no: { $in: handlingRollNumbers },
+                        role: 'student'
+                    });
+
+                    // Update handling students array
+                    updates.handling_students = handlingStudents.map(student => student._id);
+
+                    // Update handling teachers reference for each student
+                    await User.updateMany(
+                        { _id: { $in: oldHandlingStudents } },
+                        { $pull: { handling_teachers: userId } }
+                    );
+                    await User.updateMany(
+                        { _id: { $in: updates.handling_students } },
+                        { $addToSet: { handling_teachers: userId } }
+                    );
+                }
+
+                // Clean up temporary fields
+                delete updates.menteeRollNumbers;
+                delete updates.classStudentRollNumbers;
+                delete updates.handlingStudentRollNumbers;
+            } catch (error) {
+                console.error('Error processing teacher relationships:', error);
+                return res.status(400).json({
+                    success: false,
+                    message: 'Error processing teacher relationships. Please check the student roll numbers.',
+                    error: error.message
+                });
             }
         }
 
-        await user.save();
+        // Update the user
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: updates },
+            { new: true, runValidators: true }
+        ).populate('mentees', 'roll_no')
+         .populate('cls_students', 'roll_no')
+         .populate('handling_students', 'roll_no');
 
-        // Return updated user without password
-        const userResponse = user.toObject();
-        delete userResponse.password;
+        // Format the response
+        const userResponse = {
+            ...updatedUser.toObject(),
+            menteeRollNumbers: updatedUser.mentees?.map(m => m.roll_no) || [],
+            classStudentRollNumbers: updatedUser.cls_students?.map(s => s.roll_no) || [],
+            handlingStudentRollNumbers: updatedUser.handling_students?.map(s => s.roll_no) || []
+        };
 
-        res.json({ 
+        // Return success response
+        res.json({
+            success: true,
             message: 'User updated successfully',
             user: userResponse
         });
+
     } catch (error) {
         console.error('Error updating user:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error updating user',
+            error: error.message 
+        });
     }
 });
 
