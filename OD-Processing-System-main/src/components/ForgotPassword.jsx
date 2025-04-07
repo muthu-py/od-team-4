@@ -13,7 +13,6 @@ const ForgotPassword = () => {
     const [error, setError] = useState('');
     const [step, setStep] = useState(1); // 1: Email, 2: OTP, 3: New Password
     const [isLoading, setIsLoading] = useState(false);
-    const [resetToken, setResetToken] = useState('');
 
     const handleSendOTP = async (e) => {
         e.preventDefault();
@@ -22,7 +21,7 @@ const ForgotPassword = () => {
         setMessage('');
 
         try {
-            const response = await axios.post('http://localhost:5000/api/forgot-password', { email });
+            const response = await axios.post('http://localhost:5000/api/send-otp', { email });
             setMessage('OTP has been sent to your email');
             setStep(2);
         } catch (error) {
@@ -40,7 +39,6 @@ const ForgotPassword = () => {
 
         try {
             const response = await axios.post('http://localhost:5000/api/verify-otp', { email, otp });
-            setResetToken(response.data.resetToken);
             setMessage('OTP verified successfully');
             setStep(3);
         } catch (error) {
@@ -58,7 +56,8 @@ const ForgotPassword = () => {
 
         try {
             const response = await axios.post('http://localhost:5000/api/reset-password', {
-                resetToken,
+                email,
+                otp,
                 newPassword
             });
             setMessage('Password reset successful');

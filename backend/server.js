@@ -461,40 +461,37 @@ app.post('/api/verify-otp', async (req, res) => {
 // 🔹 RESET PASSWORD - With Verified OTP
 app.post('/api/reset-password', async (req, res) => {
     try {
-        const { resetToken, newPassword } = req.body;
+        const { email, otp, newPassword } = req.body;
 
-        // Verify the JWT token
-        let decoded;
-        try {
-            decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
-        } catch (err) {
-            return res.status(400).json({ message: 'Invalid or expired reset token' });
+        // Verify OTP
+        const otpData = otpStore.get(email);
+        if (!otpData || otpData.otp !== otp) {
+            return res.status(400).json({ message: 'Invalid or expired OTP' });
         }
 
-        // Update user with new password and clear reset token fields
-        const salt = await bcrypt.genSalt(10);
-        //const hashedPassword = await bcrypt.hash(newPassword, salt);
-        
-        const updatedUser = await User.findOneAndUpdate(
-            { _id: decoded.userId },
-            {
-                password: newPassword,
-                $unset: {
-                    resetPasswordToken: 1,
-                    resetPasswordExpires: 1
-                }
-            },
-            { new: true, runValidators: false }
-        );
+        // Check if OTP has expired (10 minutes)
+        if (Date.now() - otpData.timestamp > 600000) {
+            otpStore.delete(email);
+            return res.status(400).json({ message: 'OTP has expired' });
+        }
 
-        if (!updatedUser) {
+        // Find user by email
+        const user = await User.findOne({ email });
+        if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        res.json({ message: 'Password has been reset successfully' });
+        // Update user's password
+        user.password = newPassword;
+        await user.save();
+
+        // Clear OTP from store
+        otpStore.delete(email);
+
+        res.json({ message: 'Password reset successful' });
     } catch (error) {
-        console.error('Reset password error:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error resetting password:', error);
+        res.status(500).json({ message: 'Error resetting password' });
     }
 });
 
@@ -1320,7 +1317,7 @@ app.post('/api/users', isAdmin, async (req, res) => {
                 for (const rollNo of mentees) {
                     const mentee = await User.findOne({ roll_no: rollNo });
                     if (mentee) {
-                        user.mentees.push(mentee._id);
+                    user.mentees.push(mentee._id);
                         mentee.mentor = user._id;
                         await mentee.save();
                     }
@@ -1332,7 +1329,7 @@ app.post('/api/users', isAdmin, async (req, res) => {
                 for (const rollNo of cls_students) {
                     const student = await User.findOne({ roll_no: rollNo });
                     if (student) {
-                        user.cls_students.push(student._id);
+                    user.cls_students.push(student._id);
                         student.cls_advisor = user._id;
                         await student.save();
                     }
@@ -1361,7 +1358,7 @@ app.post('/api/users', isAdmin, async (req, res) => {
                 user.mentor = mentor;
             }
             if (cls_advisor) {
-                user.cls_advisor = cls_advisor;
+            user.cls_advisor = cls_advisor;
             }
         }
 
@@ -1620,7 +1617,7 @@ app.put('/api/users/:id', authenticateToken, isAdmin, async (req, res) => {
         };
 
         // Return success response
-        res.json({
+        res.json({ 
             success: true,
             message: 'User updated successfully',
             user: userResponse
@@ -1676,41 +1673,6 @@ app.post('/api/send-otp', async (req, res) => {
     } catch (error) {
         console.error('Error sending OTP:', error);
         res.status(500).json({ message: 'Error sending OTP' });
-    }
-});
-
-// Reset password route
-app.post('/api/reset-password', async (req, res) => {
-    try {
-        const { email, otp, newPassword } = req.body;
-
-        // Verify OTP again
-        const otpData = otpStore.get(email);
-        if (!otpData || otpData.otp !== otp) {
-            return res.status(400).json({ message: 'Invalid or expired OTP' });
-        }
-
-        // Update password
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Hash new password
-        //const salt = await bcrypt.genSalt(10);
-        //const hashedPassword = await bcrypt.hash(newPassword, salt);
-        
-        // Update user's password
-        user.password = newPassword;
-        await user.save();
-
-        // Clear OTP
-        otpStore.delete(email);
-
-        res.json({ message: 'Password reset successful' });
-    } catch (error) {
-        console.error('Error resetting password:', error);
-        res.status(500).json({ message: 'Error resetting password' });
     }
 });
 
