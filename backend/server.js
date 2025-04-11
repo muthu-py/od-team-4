@@ -13,7 +13,36 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Store OTPs temporarily (in production, use Redis or similar)
+
+class CircularQueue {
+    constructor(size) {
+        this.size = size;
+        this.queue = new Array(size);
+        this.head = 0;
+        this.tail = 0;
+        this.length = 0;
+    }
+    enqueue(item) {
+        this.queue[this.tail] = item;
+        this.tail = (this.tail + 1) % this.size;
+        if (this.length < this.size) {
+            this.length++;
+        } else {
+            this.head = (this.head + 1) % this.size;
+        }
+    }
+    getItems() {
+        let items = [];
+        for (let i = 0; i < this.length; i++) {
+            items.push(this.queue[(this.head + i) % this.size]);
+        }
+        return items;
+    }
+}
+
+const odApplicationLogQueue = new CircularQueue(10);
+
+
 const otpStore = new Map();
 
 // Email configuration
@@ -148,15 +177,6 @@ function generateOTP() {
 }
 
 // User Schema
-// const userSchema = new mongoose.Schema({
-//     email: { type: String, required: true, unique: true },
-//     password: { type: String, required: true },
-//     role: { type: String, enum: ['student', 'teacher', 'admin'], required: true },
-//     name: { type: String, required: true },
-//     mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'users' },
-//     cls_advisor: { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
-// });
-
 const Schema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, unique: true, required: true },
@@ -181,9 +201,6 @@ const User = mongoose.model('User', Schema);
 
 module.exports = User;
 
-
-//const User = mongoose.model('users', userSchema);
-
 // MongoDB Connection
 console.log('MongoDB URI:', process.env.MONGODB_URI); // Log the MongoDB URI for debugging
 if (!process.env.MONGODB_URI) {
@@ -192,13 +209,11 @@ if (!process.env.MONGODB_URI) {
 }
 
 mongoose.connect(process.env.MONGODB_URI, {
-
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
 .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
-    //checkUsers();
 })
 .catch(err => {
     console.error('MongoDB connection error:', err);
@@ -211,35 +226,17 @@ async function checkUsers() {
         for (const user of users) {
             console.log(`email: ${user.email}`);
             console.log(`password: ${user.password}`);
+            console.log(`role:  ${user.role}`);
         }
     } catch (error) {
         console.error('❌ Error fetching users:', error);
     }
 }
 
-// 🔹 USER REGISTRATION
-// app.post('/api/register', async (req, res) => {
-//     try {
-//         const { email, password, role, name, department } = req.body;
+checkUsers();
 
-//         let user = await User.findOne({ email });
-//         if (user) {
-//             return res.status(400).json({ message: 'User already exists' });
-//         }
-
-//         const salt = await bcrypt.genSalt(10);
-//         const hashedPassword = await bcrypt.hash(password, salt);
-
-//         user = new User({ email, password: hashedPassword, role, name, department });
-//         await user.save();
-
-//         res.json({ message: '✅ User registered successfully' });
-//     } catch (error) {
-//         console.error('❌ Register error:', error);
-//         res.status(500).json({ message: 'Server error' });
-//     }
-// });
 let uemail = "";
+
 // 🔹 GET STUDENT PROFILE
 app.get('/api/student/profile', async (req, res) => {
     try {
@@ -250,7 +247,6 @@ app.get('/api/student/profile', async (req, res) => {
         }
         console.log("after try");
         
-
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const student = await User.findById(decoded.userId)
             .populate('mentor', 'name')
@@ -260,7 +256,6 @@ app.get('/api/student/profile', async (req, res) => {
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
-        //console.log(student.roll_no);
         res.json({
             success: true,
             profile: {
@@ -290,7 +285,6 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         
-        //const isMatch = await bcrypt.compare(password, user.password);
         if (password != user.password) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -320,70 +314,6 @@ app.post('/api/login', async (req, res) => {
 });
 
 // 📧 Setup Nodemailer for Sending Emails
-// 🔹 FORGOT PASSWORD - Generate Reset Token
-// app.post('/api/forgot-password', async (req, res) => {
-//     try {
-//         const { email } = req.body;
-//         const user = await User.findOne({ email });
-
-//         if (!user) {
-//             return res.status(404).json({ message: 'User not found' });
-//         }
-
-//         const resetToken = jwt.sign(
-//             { userId: user._id },
-//             process.env.JWT_SECRET,
-//             { expiresIn: '1h' }
-//         );
-//         user.resetPasswordToken = resetToken;
-//         user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
-
-//         await user.save();
-
-//         // Here you would typically send an email with the reset token
-//         // For now, we'll just return the token
-//         res.json({ message: 'Password reset token sent', token: resetToken });
-//     } catch (error) {
-//         console.error('Forgot password error:', error);
-//         res.status(500).json({ message: 'Server error' });
-//     }
-// });
-
-// // 🔹 RESET PASSWORD - Validate Token & Set New Password
-// app.post('/api/reset-password', async (req, res) => {
-//     try {
-//         const { token, newPassword } = req.body;
-
-//         const user = await User.findOne({
-//             resetPasswordToken: token,
-//             resetPasswordExpires: { $gt: Date.now() }
-//         });
-
-//         if (!user) {
-//             return res.status(400).json({ message: 'Invalid or expired reset token' });
-//         }
-
-//         const salt = await bcrypt.genSalt(10);
-//         user.password = await bcrypt.hash(newPassword, salt);
-//         user.resetPasswordToken = undefined;
-//         user.resetPasswordExpires = undefined;
-
-//         await user.save();
-
-//         res.json({ message: 'Password has been reset' });
-//     } catch (error) {
-//         console.error('Reset password error:', error);
-//         res.status(500).json({ message: 'Server error' });
-//     }
-// });
-
-// // 🔹 ERROR HANDLING MIDDLEWARE
-// app.use((err, req, res, next) => {
-//     console.error('❌ Error:', err.stack);
-//     res.status(500).json({ message: 'Something went wrong!' });
-// });
-// Replace the existing forgot password and reset password endpoints with these:
-
 // 🔹 FORGOT PASSWORD - Generate and Send OTP
 app.post('/api/forgot-password', async (req, res) => {
     try {
@@ -432,19 +362,16 @@ app.post('/api/verify-otp', async (req, res) => {
             return res.status(400).json({ message: 'OTP expired or not found' });
         }
 
-        // Check attempts
         if (otpData.attempts >= 3) {
             otpStore.delete(email);
             return res.status(400).json({ message: 'Too many attempts. Please request a new OTP' });
         }
 
-        // Check expiry (10 minutes)
         if (Date.now() - otpData.timestamp > 600000) {
             otpStore.delete(email);
             return res.status(400).json({ message: 'OTP expired' });
         }
 
-        // Verify OTP
         if (otpData.otp !== otp) {
             otpData.attempts += 1;
             return res.status(400).json({ message: 'Invalid OTP' });
@@ -457,13 +384,11 @@ app.post('/api/verify-otp', async (req, res) => {
     }
 });
 
-
 // 🔹 RESET PASSWORD - With Verified OTP
 app.post('/api/reset-password', async (req, res) => {
     try {
         const { resetToken, newPassword } = req.body;
 
-        // Verify the JWT token
         let decoded;
         try {
             decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
@@ -471,9 +396,7 @@ app.post('/api/reset-password', async (req, res) => {
             return res.status(400).json({ message: 'Invalid or expired reset token' });
         }
 
-        // Update user with new password and clear reset token fields
         const salt = await bcrypt.genSalt(10);
-        //const hashedPassword = await bcrypt.hash(newPassword, salt);
         
         const updatedUser = await User.findOneAndUpdate(
             { _id: decoded.userId },
@@ -498,19 +421,18 @@ app.post('/api/reset-password', async (req, res) => {
     }
 });
 
-
-// Add these imports at the top of your file
+// ***********************
+// File Upload Setup with Multer
+// ***********************
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, uploadsDir);
@@ -521,9 +443,7 @@ const storage = multer.diskStorage({
     }
 });
 
-// File filter to allow specific file types
 const fileFilter = (req, file, cb) => {
-    // Accept images (jpg, jpeg, png, gif), PDFs, and common document formats
     if (
         file.mimetype === 'image/jpeg' || 
         file.mimetype === 'image/png' || 
@@ -541,23 +461,19 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: fileFilter
 });
 
-// Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 🔹 START SERVER
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-
 // OD Application Schema
 const odApplicationSchema = new mongoose.Schema({
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    //student email
-    //email: { type: String, required: true , ref : 'User.email'  },
     startDateTime: { type: Date, required: true },
     endDateTime: { type: Date, required: true },
     startSession: { type: String, enum: ['forenoon', 'afternoon','fullday'], required: true },
@@ -586,7 +502,6 @@ const ODApplication = mongoose.model('requests', odApplicationSchema);
 app.post('/api/upload-od-files', (req, res) => {
     upload.array('files', 5)(req, res, function(err) {
         if (err instanceof multer.MulterError) {
-            // A Multer error occurred when uploading
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.status(400).json({ 
                     success: false,
@@ -598,19 +513,16 @@ app.post('/api/upload-od-files', (req, res) => {
                 message: `Upload error: ${err.message}` 
             });
         } else if (err) {
-            // An unknown error occurred
             return res.status(400).json({ 
                 success: false,
                 message: err.message 
             });
         }
         
-        // Everything went fine with the upload
         try {
             const token = req.headers.authorization?.split(' ')[1];
             
             if (!token) {
-                // Delete uploaded files if authentication fails
                 if (req.files) {
                     req.files.forEach(file => {
                         fs.unlinkSync(file.path);
@@ -619,10 +531,8 @@ app.post('/api/upload-od-files', (req, res) => {
                 return res.status(401).json({ message: 'Authentication required' });
             }
             
-            // Verify token
             jwt.verify(token, process.env.JWT_SECRET);
             
-            // Return file paths with full server URL
             const serverUrl = `http://localhost:${PORT}`;
             const filePaths = req.files.map(file => `${serverUrl}/uploads/${file.filename}`);
             
@@ -635,14 +545,11 @@ app.post('/api/upload-od-files', (req, res) => {
             });
         } catch (error) {
             console.error('File upload error:', error);
-            
-            // Delete uploaded files if there's an error
             if (req.files) {
                 req.files.forEach(file => {
                     fs.unlinkSync(file.path);
                 });
             }
-            
             res.status(500).json({ message: 'Server error' });
         }
     });
@@ -658,26 +565,21 @@ app.post('/api/od-applications', async (req, res) => {
             return res.status(401).json({ message: 'Authentication required' });
         }
         
-        // Verify token and get user ID
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
         
-        // Get student details
         const student = await User.findById(studentId).populate('mentor');
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
         
-        // Extract date and session from the objects
         const startDate = startDateTime && startDateTime.date ? new Date(startDateTime.date) : startDateTime;
         const endDate = endDateTime && endDateTime.date ? new Date(endDateTime.date) : endDateTime;
         const startSession = startDateTime && startDateTime.session ? startDateTime.session : 'forenoon';
         const endSession = endDateTime && endDateTime.session ? endDateTime.session : 'forenoon';
         
-        // Ensure fileUrls is an array
         const processedFileUrls = Array.isArray(fileUrls) ? fileUrls : [];
         
-        // Create new OD application
         const newApplication = new ODApplication({
             studentId,
             startDateTime: startDate,
@@ -690,7 +592,14 @@ app.post('/api/od-applications', async (req, res) => {
         
         const savedApplication = await newApplication.save();
 
-        // Send email notification to mentor
+
+        odApplicationLogQueue.enqueue({
+            submissionDate: new Date(),
+            studentId,
+            applicationId: savedApplication._id,
+            description: savedApplication.description
+        });
+
         if (student.mentor) {
             await sendODRequestNotificationToMentor(student, student.mentor, savedApplication);
         }
@@ -706,6 +615,12 @@ app.post('/api/od-applications', async (req, res) => {
     }
 });
 
+// Get OD application submission logs
+app.get('/api/logs/od-applications', (req, res) => {
+    const logs = odApplicationLogQueue.getItems();
+    res.json({ logs });
+});
+
 // 🔹 GET STUDENT'S OD APPLICATIONS
 app.get('/api/od-applications', async (req, res) => {
     try {
@@ -716,11 +631,9 @@ app.get('/api/od-applications', async (req, res) => {
             return res.status(401).json({ message: 'Authentication required' });
         }
         
-        // Verify token and get user ID
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
         
-        // Calculate date range based on time period
         const now = new Date();
         let startDate;
         switch(timePeriod) {
@@ -737,20 +650,17 @@ app.get('/api/od-applications', async (req, res) => {
                 startDate = new Date(0);
         }
 
-        // Build query
         const query = { 
             studentId,
             submissionDate: { $gte: startDate }
         };
 
-        // Add status filter if not 'all'
         if (status !== 'all') {
             query.status = status;
         }
         
-        // Get all applications for this student with filters
         const applications = await ODApplication.find(query)
-            .sort({ submissionDate: -1 }); // Most recent first
+            .sort({ submissionDate: -1 });
         
         res.json({ applications });
     } catch (error) {
@@ -770,11 +680,9 @@ app.patch('/api/od-applications/:id/files', async (req, res) => {
             return res.status(401).json({ message: 'Authentication required' });
         }
         
-        // Verify token and get user ID
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
         
-        // Find the application and verify ownership
         const application = await ODApplication.findById(id);
         
         if (!application) {
@@ -785,7 +693,6 @@ app.patch('/api/od-applications/:id/files', async (req, res) => {
             return res.status(403).json({ message: 'Not authorized' });
         }
         
-        // Update with file URLs
         application.fileUrls = fileUrls;
         await application.save();
         
@@ -800,9 +707,9 @@ app.patch('/api/od-applications/:id/files', async (req, res) => {
     }
 });
 
-// Add these endpoints after your existing routes
-
-// Add this middleware function for token authentication
+// ***********************
+// Additional Teacher and Approval Endpoints
+// ***********************
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -820,12 +727,10 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Get OD requests from mentees
 app.get('/api/teacher/mentee-requests', authenticateToken, async (req, res) => {
     try {
         const teacherId = req.user.id;
         
-        // Find the teacher to get their mentees list
         const teacher = await User.findById(teacherId);
         
         if (!teacher || teacher.role !== 'teacher') {
@@ -835,19 +740,16 @@ app.get('/api/teacher/mentee-requests', authenticateToken, async (req, res) => {
         console.log('Teacher ID:', teacherId);
         console.log('Teacher mentees:', teacher.mentees);
         
-        // Use mentees array to find OD applications
         const studentIds = [...(teacher.mentees || [])];
         
         console.log('Looking for OD applications with studentIds:', studentIds);
         
-        // Find all OD applications submitted by the teacher's mentees
         const odApplications = await ODApplication.find({
             studentId: { $in: studentIds }
         });
         
         console.log('Found applications:', odApplications);
         
-        // Get student details for each application
         const requests = [];
         for (const app of odApplications) {
             const student = await User.findById(app.studentId);
@@ -880,27 +782,23 @@ app.get('/api/teacher/mentee-requests', authenticateToken, async (req, res) => {
     }
 });
 
-// Update the approve request endpoint for mentors
 app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (req, res) => {
     try {
         const teacherId = req.user.id;
         const { requestId } = req.params;
         
-        // Find the teacher to verify role
         const teacher = await User.findById(teacherId);
         
         if (!teacher || teacher.role !== 'teacher') {
             return res.status(403).json({ message: 'Not authorized as a teacher' });
         }
         
-        // Find the OD application
         const odApplication = await ODApplication.findById(requestId);
         
         if (!odApplication) {
             return res.status(404).json({ message: 'OD application not found' });
         }
         
-        // Get student details
         const student = await User.findById(odApplication.studentId)
             .populate('cls_advisor')
             .populate('handling_teachers');
@@ -909,10 +807,8 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
             return res.status(404).json({ message: 'Student not found' });
         }
         
-        // Get all student IDs the teacher is responsible for
         const studentIds = [...(teacher.mentees || []), ...(teacher.cls_students || [])];
         
-        // Check if this teacher is authorized to approve this application
         const studentIdStr = odApplication.studentId.toString();
         const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
         
@@ -920,15 +816,12 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
             return res.status(403).json({ message: 'Not authorized to approve this request' });
         }
         
-        // Initialize mentorApproval if it doesn't exist
         if (!odApplication.mentorApproval) {
             odApplication.mentorApproval = {};
         }
         
-        // Update the mentor approval status
         odApplication.mentorApproval.status = 'Approved';
         
-        // Only update overall status to Approved if both mentor and class advisor have approved
         if (odApplication.mentorApproval.status === 'Approved' && 
             odApplication.classAdvisorApproval?.status === 'Approved') {
             odApplication.status = 'Approved';
@@ -936,7 +829,6 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
         
         await odApplication.save();
 
-        // Send email notification to class advisor
         if (student.cls_advisor) {
             await sendApprovalNotificationToClassAdvisor(student, student.cls_advisor, odApplication);
         }
@@ -948,7 +840,6 @@ app.post('/api/teacher/approve-request/:requestId', authenticateToken, async (re
     }
 });
 
-// Update the reject request endpoint
 app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req, res) => {
     try {
         const teacherId = req.user.id;
@@ -959,30 +850,25 @@ app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req
             return res.status(400).json({ message: 'Rejection reason is required' });
         }
         
-        // Find the teacher to verify role
         const teacher = await User.findById(teacherId);
         
         if (!teacher || teacher.role !== 'teacher') {
             return res.status(403).json({ message: 'Not authorized as a teacher' });
         }
         
-        // Find the OD application
         const odApplication = await ODApplication.findById(requestId);
         
         if (!odApplication) {
             return res.status(404).json({ message: 'OD application not found' });
         }
 
-        // Get student details
         const student = await User.findById(odApplication.studentId);
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
         
-        // Get all student IDs the teacher is responsible for
         const studentIds = [...(teacher.mentees || []), ...(teacher.class_students || [])];
         
-        // Check if this teacher is authorized to reject this application
         const studentIdStr = odApplication.studentId.toString();
         const isAuthorized = studentIds.some(id => id && id.toString() === studentIdStr);
         
@@ -990,19 +876,16 @@ app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req
             return res.status(403).json({ message: 'Not authorized to reject this request' });
         }
         
-        // Initialize mentorApproval if it doesn't exist
         if (!odApplication.mentorApproval) {
             odApplication.mentorApproval = {};
         }
         
-        // Update the application status
         odApplication.mentorApproval.status = 'Rejected';
         odApplication.mentorApproval.remarks = reason;
-        odApplication.status = 'Rejected'; // Update overall status
+        odApplication.status = 'Rejected';
         
         await odApplication.save();
 
-        // Send rejection notification to student
         await sendRejectionNotification(student, odApplication, 'mentor', reason);
         
         res.json({ message: 'Request rejected successfully' });
@@ -1012,12 +895,10 @@ app.post('/api/teacher/reject-request/:requestId', authenticateToken, async (req
     }
 });
 
-// Get OD requests for class advisor
 app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, res) => {
     try {
         const teacherId = req.user.id;
         
-        // Find the teacher to get their class students list
         const teacher = await User.findById(teacherId);
         
         if (!teacher || teacher.role !== 'teacher') {
@@ -1027,18 +908,14 @@ app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, re
         console.log('Teacher ID:', teacherId);
         console.log('Teacher class students:', teacher.cls_students);
         
-        // Initialize studentIds as an empty array if cls_students is undefined
         const studentIds = [];
         
-        // Check if cls_students exists and add them to studentIds
         if (teacher.cls_students && Array.isArray(teacher.cls_students)) {
             teacher.cls_students.forEach(id => studentIds.push(id));
         }
         
         console.log('Looking for OD applications with studentIds:', studentIds);
         
-        // Find all OD applications submitted by the teacher's class students
-        // Only show applications that have been approved by the mentor
         const odApplications = await ODApplication.find({
             studentId: { $in: studentIds },
             'mentorApproval.status': 'Approved'
@@ -1046,7 +923,6 @@ app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, re
         
         console.log('Found applications:', odApplications);
         
-        // Get student details for each application
         const requests = [];
         for (const app of odApplications) {
             const student = await User.findById(app.studentId);
@@ -1079,6 +955,7 @@ app.get('/api/teacher/class-advisor-requests', authenticateToken, async (req, re
         res.status(500).json({ message: 'Server error' });
     }
 });
+
 
 // Class Advisor approve request endpoint
 app.post('/api/teacher/class-advisor-approve/:requestId', authenticateToken, async (req, res) => {
