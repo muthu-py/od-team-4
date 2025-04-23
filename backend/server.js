@@ -5,6 +5,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const multer = require('multer');
+const csv = require('csv-parser');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +16,35 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'text/csv' || 
+            file.mimetype === 'image/jpeg' || 
+            file.mimetype === 'image/png' || 
+            file.mimetype === 'image/jpg' || 
+            file.mimetype === 'image/gif' || 
+            file.mimetype === 'application/pdf' ||
+            file.mimetype === 'application/msword' || 
+            file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            cb(null, true);
+        } else {
+            cb(new Error('Unsupported file format'), false);
+        }
+    }
+});
 
 // Store OTPs temporarily (in production, use Redis or similar)
 const otpStore = new Map();
@@ -497,50 +530,13 @@ app.post('/api/reset-password', async (req, res) => {
 
 
 // Add these imports at the top of your file
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadsDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-// File filter to allow specific file types
-const fileFilter = (req, file, cb) => {
-    // Accept images (jpg, jpeg, png, gif), PDFs, and common document formats
-    if (
-        file.mimetype === 'image/jpeg' || 
-        file.mimetype === 'image/png' || 
-        file.mimetype === 'image/jpg' || 
-        file.mimetype === 'image/gif' || 
-        file.mimetype === 'application/pdf' ||
-        file.mimetype === 'application/msword' || 
-        file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ) {
-        cb(null, true);
-    } else {
-        cb(new Error('Unsupported file format. Please upload an image, PDF, or document file.'), false);
-    }
-};
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-    fileFilter: fileFilter
-});
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -1219,16 +1215,17 @@ const isAdmin = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
-            return res.status(401).json({ message: 'Authentication required' });
+            return res.status(401).json({ message: 'No token provided' });
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decoded.userId);
 
         if (!user || user.role !== 'admin') {
-            return res.status(403).json({ message: 'Admin access required' });
+            return res.status(403).json({ message: 'Access denied. Admin only.' });
         }
 
+        req.user = user;
         next();
     } catch (error) {
         res.status(401).json({ message: 'Invalid token' });
@@ -1991,5 +1988,116 @@ app.get('/api/admin/od-statistics', isAdmin, async (req, res) => {
     } catch (error) {
         console.error('Error fetching admin OD statistics:', error);
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// CSV Upload endpoint for student registration
+app.post('/api/admin/upload-students', isAdmin, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        const results = [];
+        const errors = [];
+        let successCount = 0;
+
+        // Read and parse CSV file
+        fs.createReadStream(req.file.path)
+            .pipe(csv())
+            .on('data', (data) => results.push(data))
+            .on('end', async () => {
+                for (const student of results) {
+                    try {
+                        // Validate required fields
+                        if (!student.StudentName || !student.StudentEmail || !student.Password || 
+                            !student.RollNumber || !student.Mentor || !student.ClassAdvisor) {
+                            errors.push({
+                                row: student,
+                                error: 'Missing required fields'
+                            });
+                            continue;
+                        }
+
+                        // Check if student already exists
+                        const existingStudent = await User.findOne({ 
+                            $or: [
+                                { email: student.StudentEmail },
+                                { roll_no: student.RollNumber }
+                            ]
+                        });
+
+                        if (existingStudent) {
+                            errors.push({
+                                row: student,
+                                error: 'Student already exists'
+                            });
+                            continue;
+                        }
+
+                        // Find mentor and class advisor
+                        const mentor = await User.findOne({ 
+                            email: student.Mentor,
+                            role: 'teacher'
+                        });
+
+                        const classAdvisor = await User.findOne({ 
+                            email: student.ClassAdvisor,
+                            role: 'teacher'
+                        });
+
+                        if (!mentor || !classAdvisor) {
+                            errors.push({
+                                row: student,
+                                error: 'Mentor or Class Advisor not found'
+                            });
+                            continue;
+                        }
+
+                        // Hash password
+                        const salt = await bcrypt.genSalt(10);
+                        const hashedPassword = await bcrypt.hash(student.Password, salt);
+
+                        // Create new student
+                        const newStudent = new User({
+                            name: student.StudentName,
+                            email: student.StudentEmail,
+                            password: hashedPassword,
+                            role: 'student',
+                            roll_no: student.RollNumber,
+                            mentor: mentor._id,
+                            cls_advisor: classAdvisor._id
+                        });
+
+                        await newStudent.save();
+                        successCount++;
+
+                        // Update mentor's mentees
+                        mentor.mentees.push(newStudent._id);
+                        await mentor.save();
+
+                        // Update class advisor's students
+                        classAdvisor.cls_students.push(newStudent._id);
+                        await classAdvisor.save();
+
+                    } catch (error) {
+                        errors.push({
+                            row: student,
+                            error: error.message
+                        });
+                    }
+                }
+
+                // Delete the uploaded file
+                fs.unlinkSync(req.file.path);
+
+                res.json({
+                    message: `Successfully processed ${successCount} students`,
+                    errors: errors
+                });
+            });
+    } catch (error) {
+        console.error('Error processing CSV:', error);
+        res.status(500).json({ message: 'Error processing CSV file' });
     }
 });

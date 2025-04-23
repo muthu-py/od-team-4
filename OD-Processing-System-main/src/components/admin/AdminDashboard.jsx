@@ -31,6 +31,7 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import axios from 'axios';
+import StudentCSVUpload from '../StudentCSVUpload';
 
 const StatsCard = ({ title, value, color = 'primary' }) => (
     <Card sx={{ 
@@ -82,6 +83,7 @@ const AdminDashboard = () => {
     const [timePeriod, setTimePeriod] = useState('7days');
     const [selectedTeacher, setSelectedTeacher] = useState('all');
     const [selectedStudent, setSelectedStudent] = useState('all');
+    const [tabValue, setTabValue] = useState(0);
 
     useEffect(() => {
         fetchUsers();
@@ -293,20 +295,24 @@ const AdminDashboard = () => {
     };
 
     const handleTabChange = (event, newValue) => {
-        setActiveTab(newValue);
+        setTabValue(newValue);
     };
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-            <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 3 }}>
-                <Tab label="Statistics" />
-                <Tab label="User Management" />
-            </Tabs>
+            <Typography variant="h4" gutterBottom>
+                Admin Dashboard
+            </Typography>
 
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                <Tabs value={tabValue} onChange={handleTabChange}>
+                    <Tab label="Overview" />
+                    <Tab label="User Management" />
+                    <Tab label="Bulk Student Upload" />
+                </Tabs>
+            </Box>
 
-            {activeTab === 0 ? (
+            {tabValue === 0 && (
                 <>
                     <Box sx={{ mb: 3 }}>
                         <Grid container spacing={2} alignItems="center">
@@ -461,7 +467,9 @@ const AdminDashboard = () => {
                         </>
                     )}
                 </>
-            ) : (
+            )}
+
+            {tabValue === 1 && (
                 <>
                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                         <Typography variant="h5">
@@ -524,6 +532,12 @@ const AdminDashboard = () => {
                         </Table>
                     </TableContainer>
                 </>
+            )}
+
+            {tabValue === 2 && (
+                <Box sx={{ mt: 3 }}>
+                    <StudentCSVUpload />
+                </Box>
             )}
 
             <Dialog open={open} onClose={handleClose}>
