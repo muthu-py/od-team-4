@@ -716,6 +716,14 @@ app.post('/api/od-applications', async (req, res) => {
         
         const savedApplication = await newApplication.save();
 
+
+        odApplicationLogQueue.enqueue({
+            submissionDate: new Date(),
+            studentId,
+            applicationId: savedApplication._id,
+            description: savedApplication.description
+        });
+
         // Send email notification to mentor
         if (student.mentor) {
             await sendODRequestNotificationToMentor(student, student.mentor, savedApplication);
@@ -730,6 +738,12 @@ app.post('/api/od-applications', async (req, res) => {
         console.error('OD application submission error:', error);
         res.status(500).json({ message: 'Server error' });
     }
+});
+
+// Get OD application submission logs
+app.get('/api/logs/od-applications', (req, res) => {
+    const logs = odApplicationLogQueue.getItems();
+    res.json({ logs });
 });
 
 // 🔹 GET STUDENT'S OD APPLICATIONS
