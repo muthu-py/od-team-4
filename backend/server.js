@@ -231,7 +231,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 })
 .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
-    //checkUsers();
+    checkUsers();
 })
 .catch(err => {
     console.error('MongoDB connection error:', err);
