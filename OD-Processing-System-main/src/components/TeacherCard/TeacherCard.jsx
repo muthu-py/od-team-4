@@ -96,6 +96,16 @@ const TeacherCard = ({ request, onApprove, onReject }) => {
         }
     };
 
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
     return (
         <StyledCard>
             <CardContent>
@@ -169,14 +179,31 @@ const TeacherCard = ({ request, onApprove, onReject }) => {
                         {request.name}
                     </Typography>
                     <Chip 
-                        label={request.odSubmissionStatus}
-                        color={getStatusColor(request.odSubmissionStatus)}
+                        label={request.status || request.odSubmissionStatus}
+                        color={getStatusColor(request.status || request.odSubmissionStatus)}
                         size="small"
                     />
                 </Box>
 
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" sx={{ color: 'rgba(0, 0, 0, 0.6)', mb: 1 }}>
+                        Date Range
+                    </Typography>
+                    <Typography variant="body1">
+                        {formatDate(request.startDateTime || request.startDate)}
+                        {(request.endDateTime || request.endDate) !== (request.startDateTime || request.startDate) && (
+                            <>
+                                <Box component="span" sx={{ mx: 1, color: 'rgba(0, 0, 0, 0.4)' }}>
+                                    to
+                                </Box>
+                                {formatDate(request.endDateTime || request.endDate)}
+                            </>
+                        )}
+                    </Typography>
+                </Box>
+
                 <Typography variant="body2" sx={{ color: 'rgba(0, 0, 0, 0.6)', mb: 2 }}>
-                    {request.reason}
+                    {request.description || request.reason}
                 </Typography>
 
                 <Box sx={{ 
@@ -198,25 +225,12 @@ const TeacherCard = ({ request, onApprove, onReject }) => {
                     >
                         View Details
                     </Button>
-                    {request.odSubmissionStatus === 'Pending' && (
+                    {(request.status === 'Pending' || request.odSubmissionStatus === 'Pending') && (
                         <>
-                            <Button 
-                                variant="contained" 
-                                onClick={onApprove}
-                                sx={{ 
-                                    backgroundColor: '#1a237e',
-                                    '&:hover': {
-                                        backgroundColor: '#0066cc'
-                                    }
-                                }}
-                            >
+                            <Button variant="contained" onClick={onApprove}>
                                 Approve
                             </Button>
-                            <Button 
-                                variant="outlined" 
-                                color="error"
-                                onClick={handleRejectClick}
-                            >
+                            <Button variant="outlined" color="error" onClick={handleRejectClick}>
                                 Reject
                             </Button>
                         </>
@@ -286,8 +300,8 @@ const TeacherCard = ({ request, onApprove, onReject }) => {
                                     Status
                                 </Typography>
                                 <Chip 
-                                    label={request.odSubmissionStatus}
-                                    color={getStatusColor(request.odSubmissionStatus)}
+                                    label={request.status || request.odSubmissionStatus}
+                                    color={getStatusColor(request.status || request.odSubmissionStatus)}
                                     size="small"
                                     sx={{ mb: 2 }}
                                 />

@@ -21,7 +21,8 @@ import {
     FormControl,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    CircularProgress
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import axios from 'axios';
@@ -141,21 +142,33 @@ const ODHistoryTable = ({ submissions = [] }) => {
     const [openDialog, setOpenDialog] = useState(false);
     const [timePeriod, setTimePeriod] = useState('lifetime');
     const [status, setStatus] = useState('all');
+    const [semester, setSemester] = useState('all');
     const [filteredSubmissions, setFilteredSubmissions] = useState(submissions);
+    const [currentSemester, setCurrentSemester] = useState(null);
+    const [previousSemesters, setPreviousSemesters] = useState([]);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         fetchSubmissions();
-    }, [timePeriod, status]);
+    }, [timePeriod, status, semester]);
 
     const fetchSubmissions = async () => {
         try {
+            setLoading(true);
             const token = localStorage.getItem('token');
-            const response = await axios.get(`http://localhost:5000/api/od-applications?timePeriod=${timePeriod}&status=${status}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get(
+                `http://localhost:5000/api/od-applications?timePeriod=${timePeriod}&status=${status}&semester=${semester}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` }
+                }
+            );
             setFilteredSubmissions(response.data.applications || []);
+            setCurrentSemester(response.data.currentSemester);
+            setPreviousSemesters(response.data.previousSemesters || []);
         } catch (error) {
             console.error('Error fetching submissions:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -252,7 +265,7 @@ const ODHistoryTable = ({ submissions = [] }) => {
                         <InputLabel>Time Period</InputLabel>
                         <Select
                             value={timePeriod}
-                            onChange={handleTimePeriodChange}
+                            onChange={(e) => setTimePeriod(e.target.value)}
                             label="Time Period"
                         >
                             <MenuItem value="lifetime">Lifetime</MenuItem>
@@ -266,7 +279,7 @@ const ODHistoryTable = ({ submissions = [] }) => {
                         <InputLabel>Status</InputLabel>
                         <Select
                             value={status}
-                            onChange={handleStatusChange}
+                            onChange={(e) => setStatus(e.target.value)}
                             label="Status"
                         >
                             <MenuItem value="all">All Status</MenuItem>
@@ -275,118 +288,145 @@ const ODHistoryTable = ({ submissions = [] }) => {
                             <MenuItem value="Rejected">Rejected</MenuItem>
                         </Select>
                     </StyledFormControl>
+
+                    <StyledFormControl>
+                        <InputLabel>Semester</InputLabel>
+                        <Select
+                            value={semester}
+                            onChange={(e) => setSemester(e.target.value)}
+                            label="Semester"
+                        >
+                            <MenuItem value="all">All Semesters</MenuItem>
+                            {currentSemester && (
+                                <MenuItem value={currentSemester}>
+                                    Current Semester ({currentSemester})
+                                </MenuItem>
+                            )}
+                            {previousSemesters.map((sem) => (
+                                <MenuItem key={sem} value={sem}>
+                                    Semester {sem}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </StyledFormControl>
                 </FilterContainer>
 
-                <StyledTableContainer>
-                    <Table stickyHeader>
-                        <TableHead>
-                            <TableRow>
-                                <StyledTableCell width="8%">S.No</StyledTableCell>
-                                <StyledTableCell width="20%">Date</StyledTableCell>
-                                <StyledTableCell width="15%">Session</StyledTableCell>
-                                <StyledTableCell width="25%">Purpose</StyledTableCell>
-                                <StyledTableCell width="15%">Status</StyledTableCell>
-                                <StyledTableCell width="17%">Remarks</StyledTableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {filteredSubmissions.length === 0 ? (
+                {loading ? (
+                    <Box display="flex" justifyContent="center" p={3}>
+                        <CircularProgress />
+                    </Box>
+                ) : (
+                    <StyledTableContainer>
+                        <Table stickyHeader>
+                            <TableHead>
                                 <TableRow>
-                                    <ContentTableCell 
-                                        colSpan={6} 
-                                        align="center" 
-                                        sx={{ 
-                                            py: 8,
-                                            color: 'rgba(0, 0, 0, 0.5)',
-                                            fontStyle: 'italic',
-                                            background: 'rgba(26, 35, 126, 0.02)',
-                                        }}
-                                    >
-                                        <Box sx={{ 
-                                            display: 'flex', 
-                                            flexDirection: 'column', 
-                                            alignItems: 'center',
-                                            gap: 1
-                                        }}>
-                                            <Typography variant="body1">
-                                                No OD applications found
-                                            </Typography>
-                                            <Typography variant="caption" sx={{ color: 'rgba(0, 0, 0, 0.4)' }}>
-                                                Submit your first application using the form above
-                                            </Typography>
-                                        </Box>
-                                    </ContentTableCell>
+                                    <StyledTableCell width="8%">S.No</StyledTableCell>
+                                    <StyledTableCell width="20%">Date</StyledTableCell>
+                                    <StyledTableCell width="15%">Session</StyledTableCell>
+                                    <StyledTableCell width="25%">Purpose</StyledTableCell>
+                                    <StyledTableCell width="15%">Status</StyledTableCell>
+                                    <StyledTableCell width="17%">Remarks</StyledTableCell>
                                 </TableRow>
-                            ) : (
-                                filteredSubmissions.map((submission, index) => (
-                                    <TableRow 
-                                        key={index}
-                                        onClick={() => handleRowClick(submission)}
-                                        sx={{ 
-                                            cursor: 'pointer',
-                                            '&:nth-of-type(even)': {
-                                                backgroundColor: 'rgba(26, 35, 126, 0.01)'
-                                            },
-                                            '&:hover': {
-                                                backgroundColor: 'rgba(26, 35, 126, 0.05)'
-                                            }
-                                        }}
-                                    >
-                                        <ContentTableCell>
-                                            <Typography sx={{ 
-                                                fontWeight: 500,
-                                                color: '#1a237e',
-                                                textAlign: 'center'
+                            </TableHead>
+                            <TableBody>
+                                {filteredSubmissions.length === 0 ? (
+                                    <TableRow>
+                                        <ContentTableCell 
+                                            colSpan={6} 
+                                            align="center" 
+                                            sx={{ 
+                                                py: 8,
+                                                color: 'rgba(0, 0, 0, 0.5)',
+                                                fontStyle: 'italic',
+                                                background: 'rgba(26, 35, 126, 0.02)',
+                                            }}
+                                        >
+                                            <Box sx={{ 
+                                                display: 'flex', 
+                                                flexDirection: 'column', 
+                                                alignItems: 'center',
+                                                gap: 1
                                             }}>
-                                                {index + 1}
-                                            </Typography>
-                                        </ContentTableCell>
-                                        <ContentTableCell>
-                                            <Box sx={{ fontWeight: 500 }}>
-                                                {formatDate(submission.startDateTime)}
-                                                {submission.endDateTime !== submission.startDateTime && (
-                                                    <>
-                                                        <Box component="span" sx={{ color: 'rgba(0, 0, 0, 0.4)', mx: 1 }}>
-                                                            to
-                                                        </Box>
-                                                        {formatDate(submission.endDateTime)}
-                                                    </>
-                                                )}
+                                                <Typography variant="body1">
+                                                    No OD applications found
+                                                </Typography>
+                                                <Typography variant="caption" sx={{ color: 'rgba(0, 0, 0, 0.4)' }}>
+                                                    Submit your first application using the form above
+                                                </Typography>
                                             </Box>
                                         </ContentTableCell>
-                                        <ContentTableCell>
-                                            {getSessionDisplay(submission.startSession, submission.endSession)}
-                                        </ContentTableCell>
-                                        <ContentTableCell>{submission.description}</ContentTableCell>
-                                        <ContentTableCell>
-                                            <Chip 
-                                                label={submission.status}
-                                                color={getStatusColor(submission.status)}
-                                                size="small"
-                                                sx={{ 
-                                                    minWidth: 85,
-                                                    fontWeight: 500,
-                                                    borderRadius: '4px',
-                                                    textTransform: 'capitalize',
-                                                    '& .MuiChip-label': {
-                                                        px: 2
-                                                    }
-                                                }}
-                                            />
-                                        </ContentTableCell>
-                                        <ContentTableCell>
-                                            {submission.mentorApproval?.remarks || 
-                                             submission.classAdvisorApproval?.remarks || 
-                                             (submission.status === 'Pending' ? 'Under review' : 
-                                              submission.status === 'Approved' ? 'Application approved' : 
-                                              'Request rejected')}
-                                        </ContentTableCell>
                                     </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </StyledTableContainer>
+                                ) : (
+                                    filteredSubmissions.map((submission, index) => (
+                                        <TableRow 
+                                            key={index}
+                                            onClick={() => handleRowClick(submission)}
+                                            sx={{ 
+                                                cursor: 'pointer',
+                                                '&:nth-of-type(even)': {
+                                                    backgroundColor: 'rgba(26, 35, 126, 0.01)'
+                                                },
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(26, 35, 126, 0.05)'
+                                                }
+                                            }}
+                                        >
+                                            <ContentTableCell>
+                                                <Typography sx={{ 
+                                                    fontWeight: 500,
+                                                    color: '#1a237e',
+                                                    textAlign: 'center'
+                                                }}>
+                                                    {index + 1}
+                                                </Typography>
+                                            </ContentTableCell>
+                                            <ContentTableCell>
+                                                <Box sx={{ fontWeight: 500 }}>
+                                                    {formatDate(submission.startDateTime)}
+                                                    {submission.endDateTime !== submission.startDateTime && (
+                                                        <>
+                                                            <Box component="span" sx={{ color: 'rgba(0, 0, 0, 0.4)', mx: 1 }}>
+                                                                to
+                                                            </Box>
+                                                            {formatDate(submission.endDateTime)}
+                                                        </>
+                                                    )}
+                                                </Box>
+                                            </ContentTableCell>
+                                            <ContentTableCell>
+                                                {getSessionDisplay(submission.startSession, submission.endSession)}
+                                            </ContentTableCell>
+                                            <ContentTableCell>{submission.description}</ContentTableCell>
+                                            <ContentTableCell>
+                                                <Chip 
+                                                    label={submission.status}
+                                                    color={getStatusColor(submission.status)}
+                                                    size="small"
+                                                    sx={{ 
+                                                        minWidth: 85,
+                                                        fontWeight: 500,
+                                                        borderRadius: '4px',
+                                                        textTransform: 'capitalize',
+                                                        '& .MuiChip-label': {
+                                                            px: 2
+                                                        }
+                                                    }}
+                                                />
+                                            </ContentTableCell>
+                                            <ContentTableCell>
+                                                {submission.mentorApproval?.remarks || 
+                                                 submission.classAdvisorApproval?.remarks || 
+                                                 (submission.status === 'Pending' ? 'Under review' : 
+                                                  submission.status === 'Approved' ? 'Application approved' : 
+                                                  'Request rejected')}
+                                            </ContentTableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </StyledTableContainer>
+                )}
             </CardContent>
 
             {/* Details Dialog */}

@@ -16,6 +16,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import BadgeIcon from '@mui/icons-material/Badge';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import PersonIcon from '@mui/icons-material/Person';
+import ClassIcon from '@mui/icons-material/Class';
 
 // Styled components for profile section
 const ProfileCard = styled(Card)(({ theme }) => ({
@@ -79,7 +80,9 @@ export default function StudentProfile() {
         department: 'Loading...',
         roll_no: 'Loading...',
         mentor: 'Loading...',
-        classAdvisor: 'Loading...'
+        classAdvisor: 'Loading...',
+        cur_sem: 'Loading...',
+        pre_sem: []
     });
 
     useEffect(() => {
@@ -96,15 +99,15 @@ export default function StudentProfile() {
                     console.log('Raw API response:', data);
                     console.log('Profile data:', data.profile);
                     
-                    // Directly use the mentor and class advisor names from the API response
-                    // The backend already populates these fields with names instead of object IDs
                     setStudentProfile({
                         name: data.profile.name || 'Not available',
                         email: data.profile.email || 'Not available',
                         department: data.profile.department || 'IT',
                         roll_no: data.profile.roll_no || 'Not available',
                         mentor: typeof data.profile.mentor === 'object' ? data.profile.mentor.name : (data.profile.mentor || 'Not assigned'),
-                        classAdvisor: typeof data.profile.cls_advisor === 'object' ? data.profile.cls_advisor.name : (data.profile.cls_advisor || 'Not assigned')
+                        classAdvisor: typeof data.profile.cls_advisor === 'object' ? data.profile.cls_advisor.name : (data.profile.cls_advisor || 'Not assigned'),
+                        cur_sem: data.profile.cur_sem || 'Not set',
+                        pre_sem: data.profile.pre_sem || []
                     });
                 }
             } catch (error) {
@@ -175,6 +178,20 @@ export default function StudentProfile() {
                                     </Typography>
                                 </Box>
                             </InfoItem>
+
+                            <InfoItem>
+                                <InfoIcon>
+                                    <ClassIcon />
+                                </InfoIcon>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Current Semester
+                                    </Typography>
+                                    <Typography variant="body1" fontWeight="medium">
+                                        {studentProfile.cur_sem}
+                                    </Typography>
+                                </Box>
+                            </InfoItem>
                         </Grid>
                         
                         <Grid item xs={12} md={6}>
@@ -216,6 +233,22 @@ export default function StudentProfile() {
                                     </Typography>
                                     <Typography variant="body1" fontWeight="medium">
                                         {studentProfile.classAdvisor}
+                                    </Typography>
+                                </Box>
+                            </InfoItem>
+
+                            <InfoItem>
+                                <InfoIcon>
+                                    <ClassIcon />
+                                </InfoIcon>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Previous Semesters
+                                    </Typography>
+                                    <Typography variant="body1" fontWeight="medium">
+                                        {studentProfile.pre_sem && studentProfile.pre_sem.length > 0 
+                                            ? studentProfile.pre_sem.join(', ') 
+                                            : 'None'}
                                     </Typography>
                                 </Box>
                             </InfoItem>
