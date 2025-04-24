@@ -17,6 +17,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+class CircularQueue {
+    constructor(size) {
+        this.size = size;
+        this.queue = new Array(size);
+        this.head = 0;
+        this.tail = 0;
+        this.length = 0;
+    }
+    enqueue(item) {
+        this.queue[this.tail] = item;
+        this.tail = (this.tail + 1) % this.size;
+        if (this.length < this.size) {
+            this.length++;
+        } else {
+            this.head = (this.head + 1) % this.size;
+        }
+    }
+    getItems() {
+        let items = [];
+        for (let i = 0; i < this.length; i++) {
+            items.push(this.queue[(this.head + i) % this.size]);
+        }
+        return items;
+    }
+}
+
+const odApplicationLogQueue = new CircularQueue(10);
+
+
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -53,10 +84,12 @@ const otpStore = new Map();
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL,
-        pass: process.env.EMAIL_PASSWORD
-    }
-});
+      user: process.env.EMAIL,
+      pass: process.env.EMAIL_PASSWORD
+    },
+    debug: true,
+    logger: true
+  });
 
 // Email notification functions
 async function sendODRequestNotificationToMentor(student, mentor, odRequest) {
@@ -709,6 +742,8 @@ app.get('/api/od-applications', async (req, res) => {
             return res.status(401).json({ message: 'Authentication required' });
         }
         
+        
+
         // Verify token and get user ID
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const studentId = decoded.userId;
