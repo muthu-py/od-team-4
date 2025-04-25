@@ -229,15 +229,13 @@ if (!process.env.MONGODB_URI) {
 }
 
 mongoose.connect(process.env.MONGODB_URI, {
+
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
 .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
-    // Initialize tree data structure
-    const { initializeTreeDataManager } = require('./models');
-    await initializeTreeDataManager();
-    console.log('✅ Tree data structure initialized');
+    //checkUsers();
 })
 .catch(err => {
     console.error('MongoDB connection error:', err);
@@ -339,12 +337,6 @@ app.post('/api/login', async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
-
-        // Get OD requests from tree data structure if user is a student
-        let odRequests = [];
-        if (user.role === 'student' && user.cur_sem) {
-            odRequests = treeDataManager.getStudentODRequests(user._id.toString(), user.cur_sem);
-        }
         
         res.json({
             token,
@@ -354,8 +346,7 @@ app.post('/api/login', async (req, res) => {
                 role: user.role,
                 name: user.name,
                 mentor: user.mentor,
-                cls_advisor: user.cls_advisor,
-                odRequests: odRequests
+                cls_advisor: user.cls_advisor
             },
             success: true
         });
@@ -559,33 +550,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
 
-// Import TreeDataManager
-const { ODApplication, treeDataManager } = require('./models');
-
-// Handle OD request creation with tree data structure
-async function createODRequest(odData) {
-    try {
-        // Add to tree data structure and MongoDB
-        const savedRequest = await treeDataManager.addODRequest(odData, ODApplication);
-        return savedRequest;
-    } catch (error) {
-        console.error('Error creating OD request:', error);
-        throw error;
-    }
-}
-
-// Handle OD request status update with tree data structure
-async function updateODRequestStatus(requestId, status) {
-    try {
-        // Update in tree data structure and MongoDB
-        const updatedRequest = await treeDataManager.updateODRequestStatus(requestId, status, ODApplication);
-        return updatedRequest;
-    } catch (error) {
-        console.error('Error updating OD request status:', error);
-        throw error;
-    }
-}
-
 // OD Application Schema
 const ODApplicationSchema = new mongoose.Schema({
     studentId: {
@@ -655,7 +619,7 @@ const ODApplicationSchema = new mongoose.Schema({
     }
 });
 
-const ODApplication_1 = mongoose.model('requests', ODApplicationSchema);
+const ODApplication = mongoose.model('requests', ODApplicationSchema);
 
 // 🔹 UPLOAD FILES FOR OD APPLICATION
 app.post('/api/upload-od-files', (req, res) => {
@@ -749,7 +713,7 @@ app.post('/api/od-applications', async (req, res) => {
         }
 
         // Check number of OD requests for current semester
-        const semesterRequests = await ODApplication_1.countDocuments({
+        const semesterRequests = await ODApplication.countDocuments({
             studentId,
             semester: student.cur_sem
         });
