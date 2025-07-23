@@ -61,9 +61,11 @@ const transporter = nodemailer.createTransport({
 // Email notification functions
 async function sendODRequestNotificationToMentor(student, mentor, odRequest) {
     try {
+        const mentoremail = await User.findOne({_id:mentor});
+        // console.log(mentorid)
         const mailOptions = {
             from: process.env.EMAIL,
-            to: mentor.email,
+            to: mentoremail.email,
             subject: 'New OD Request Submitted',
             html: `
                 <h2>New OD Request Notification</h2>
@@ -309,6 +311,7 @@ app.get('/api/student/profile', async (req, res) => {
                 mentor: student.mentor?.name || 'Not assigned',
                 cls_advisor: student.cls_advisor?.name || 'Not assigned'
             }
+
         });
     } catch (error) {
         console.error('Get student profile error:', error);
@@ -749,6 +752,7 @@ app.post('/api/od-applications', async (req, res) => {
 
         // Send email notification to mentor
         if (student.mentor) {
+            console.log(student.mentor)
             await sendODRequestNotificationToMentor(student, student.mentor, savedApplication);
         }
         
