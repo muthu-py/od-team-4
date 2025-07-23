@@ -23,6 +23,18 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 const StyledForm = styled('form')({
   width: '100%',
+  position: 'relative',
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+    borderRadius: '16px',
+    pointerEvents: 'none',
+  }
 });
 
 // Update AppBar styling
@@ -34,25 +46,44 @@ const StyledAppBar = styled(AppBar)({
 // Update container styling
 const StyledContainer = styled(Container)({
   '& .MuiCard-root': {
-    backgroundColor: '#ffffff',
-    boxShadow: 'none',
-    border: '1px solid #e0e0e0',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+    borderRadius: '16px',
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+    // '&:hover': {
+    //   transform: 'translateY(-5px)',
+    //   boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+    // }
   },
+  '& .MuiGrid2-root': {
+    transition: 'transform 0.3s ease',
+    // '&:hover': {
+    //   transform: 'translateX(5px)',
+    // }
+  }
 });
 
 // Update page title styling
 const PageTitle = styled(Typography)({
   position: 'relative',
+  color: '#1a237e',
+  textTransform: 'uppercase',
+  letterSpacing: '2px',
+  fontWeight: 600,
+  textAlign: 'center',
   '&:after': {
     content: '""',
     position: 'absolute',
-    bottom: '-8px',
+    bottom: '-12px',
     left: '50%',
     transform: 'translateX(-50%)',
-    width: '100px',
-    height: '3px',
-    backgroundColor: '#0066cc',
-  },
+    width: '60px',
+    height: '4px',
+    background: 'linear-gradient(90deg, #1a237e 0%, #0066cc 100%)',
+    borderRadius: '2px',
+  }
 });
 
 // Remove Navbar-related imports
@@ -91,7 +122,7 @@ export default function Form() {
                     const formattedSubmissions = response.data.applications.map(app => ({
                         startDate: new Date(app.startDateTime).toLocaleDateString(),
                         endDate: new Date(app.endDateTime).toLocaleDateString(),
-                        session: getSession(app.startDateTime),
+                        session: app.startSession.charAt(0).toUpperCase() + app.startSession.slice(1),
                         purpose: app.description.substring(0, 30) + (app.description.length > 30 ? '...' : ''),
                         status: app.status,
                         remarks: getMostRecentRemark(app)
@@ -111,13 +142,6 @@ export default function Form() {
 
         fetchSubmissions();
     }, []);
-
-    // Helper function to determine session (morning/afternoon)
-    const getSession = (dateTimeStr) => {
-        const date = new Date(dateTimeStr);
-        const hours = date.getHours();
-        return hours < 12 ? 'Forenoon' : 'Afternoon';
-    };
 
     // Helper function to get the most recent remark
     const getMostRecentRemark = (application) => {
@@ -256,7 +280,7 @@ export default function Form() {
                 const formattedSubmissions = response.data.applications.map(app => ({
                     startDate: new Date(app.startDateTime).toLocaleDateString(),
                     endDate: new Date(app.endDateTime).toLocaleDateString(),
-                    session: getSession(app.startDateTime),
+                    session: app.startSession.charAt(0).toUpperCase() + app.startSession.slice(1),
                     purpose: app.description.substring(0, 30) + (app.description.length > 30 ? '...' : ''),
                     status: app.status,
                     remarks: getMostRecentRemark(app)
@@ -286,142 +310,290 @@ export default function Form() {
     };
 
     return (
-        <StyledContainer maxWidth="md">
-            <Box sx={{ 
-                mt: 4,
-                mb: 4,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-            }}>
-                <PageTitle 
-                    variant="h4" 
-                    fontWeight="500" 
-                    sx={{
-                        color: "#0066cc",
-                        mb: 4,
-                        textAlign: 'center',
-                    }} 
-                >
-                    OD FORM
-                </PageTitle>
-
-                <Card sx={{ 
-                    p: 3, 
-                    width: '100%',
-                    bgcolor: '#ffffff',
-                    mb: 4
+        <Box sx={{
+            minHeight: '100vh',
+            background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%)',
+            py: 4,
+            position: 'relative',
+            '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '200px',
+                background: 'linear-gradient(180deg, rgba(26, 35, 126, 0.05) 0%, transparent 100%)',
+                pointerEvents: 'none',
+            }
+        }}>
+            <StyledContainer maxWidth="lg">
+                <Box sx={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
                 }}>
-                    <CardContent>
-                        <StyledForm action="/ODForm" method="POST" onSubmit={handleSubmit}>
-                            <Grid2 
-                                container 
-                                spacing={4} 
-                                direction="column"
-                                sx={{ 
-                                    '& .MuiGrid2-root': { 
-                                        transition: 'transform 0.2s',
-                                        px: 2
-                                    }
-                                }}
-                            >
-                                {/* DateTime Picker */}
-                                <Grid2 item>
-                                    <Typography variant="h6" sx={{ mb: 2, color: '#333' }}>
-                                        Select Date and Time
-                                    </Typography>
-                                    <DateTimePicker 
-                                        onStartDateChange={handleStartDateChange} 
-                                        onEndDateChange={handleEndDateChange} 
-                                    />
-                                </Grid2>
+                    <PageTitle 
+                        variant="h4" 
+                        sx={{
+                            mb: 2,
+                            position: 'relative',
+                            '&::before': {
+                                content: '""',
+                                position: 'absolute',
+                                top: '-20px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                width: '40px',
+                                height: '4px',
+                                background: 'linear-gradient(90deg, #1a237e 0%, #0066cc 100%)',
+                                borderRadius: '2px',
+                            }
+                        }} 
+                    >
+                        On-Duty Application Form
+                    </PageTitle>
 
-                                {/* Text Area */}
-                                <Grid2 item>
-                                    <Typography variant="h6" sx={{ mb: 2, color: '#333' }}>
-                                        Reason for OD
-                                    </Typography>
-                                    <Textarea
-                                        size="lg"
-                                        name="description"
-                                        placeholder="Please provide detailed reason for On-Duty request..."
-                                        minRows={4}
-                                        sx={{
-                                            borderRadius: 1,
-                                            fontSize: '1rem',
-                                            '&:hover': {
-                                                borderColor: '#1976d2',
-                                            },
-                                            '&:focus': {
-                                                borderColor: '#1976d2',
-                                                boxShadow: '0 0 0 2px rgba(25,118,210,0.2)',
+                    <Box sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' },
+                        gap: 4,
+                        alignItems: 'stretch',
+                        '& > *': {
+                            height: '100%',
+                        }
+                    }}>
+                        {/* OD Form */}
+                        <Card sx={{ 
+                            p: 4, 
+                            position: 'relative',
+                            overflow: 'visible',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            '&::before': {
+                                content: '""',
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+                                borderRadius: '16px',
+                                zIndex: 0,
+                            }
+                        }}>
+                            <CardContent sx={{
+                                height: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                p: '0 !important',
+                            }}>
+                                <StyledForm 
+                                    action="/ODForm" 
+                                    method="POST" 
+                                    onSubmit={handleSubmit}
+                                    sx={{
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                    }}
+                                >
+                                    <Grid2 
+                                        container 
+                                        spacing={3} 
+                                        direction="column"
+                                        sx={{ 
+                                            height: '100%',
+                                            '& .MuiGrid2-root': { 
+                                                transition: 'all 0.3s ease',
+                                                px: 2,
+                                                // '&:hover': {
+                                                //     transform: 'translateX(5px)',
+                                                // }
                                             }
                                         }}
-                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    />
-                                </Grid2>
-
-                                {/* File Upload Component */}
-                                <Grid2 item sx={{ mt: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
-                                        Supporting Documents
-                                    </Typography>
-                                    <InputFileUpload 
-                                        onFilesSelected={handleFileChange} 
-                                        onUploadError={handleFileUploadError}
-                                    />
-                                </Grid2>
-                                
-                                {/* Submit Button with loading state */}
-                                <Grid2 item sx={{ mt: 3 }}>
-                                    <Button 
-                                        type="submit" 
-                                        variant="contained" 
-                                        disabled={isLoading}
-                                        sx={{ 
-                                            backgroundColor: "#1976d2",
-                                            py: 2,
-                                            fontSize: '1.1rem',
-                                            fontWeight: 'bold',
-                                            transition: 'all 0.3s',
-                                            '&:hover': {
-                                                backgroundColor: '#1565c0',
-                                                boxShadow: '0 6px 12px rgba(25,118,210,0.3)',
-                                            }
-                                        }} 
-                                        fullWidth
                                     >
-                                        {isLoading ? (
-                                            <CircularProgress size={24} color="inherit" />
-                                        ) : (
-                                            'Submit Application'
-                                        )}
-                                    </Button>
-                                </Grid2>
-                            </Grid2>
-                        </StyledForm>
-                    </CardContent>
-                </Card>
+                                        {/* DateTime Picker */}
+                                        <Grid2 item>
+                                            <Typography 
+                                                variant="h6" 
+                                                sx={{ 
+                                                    mb: 2, 
+                                                    color: '#1a237e',
+                                                    fontWeight: 500,
+                                                    position: 'relative',
+                                                    pl: 2,
+                                                    '&::before': {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        top: '50%',
+                                                        transform: 'translateY(-50%)',
+                                                        width: '4px',
+                                                        height: '20px',
+                                                        background: 'linear-gradient(to bottom, #1a237e, #0066cc)',
+                                                        borderRadius: '2px',
+                                                    }
+                                                }}
+                                            >
+                                                Select Date and Time
+                                            </Typography>
+                                            <DateTimePicker 
+                                                onStartDateChange={handleStartDateChange} 
+                                                onEndDateChange={handleEndDateChange} 
+                                            />
+                                        </Grid2>
 
-                {/* OD History Table */}
-                <ODHistoryTable submissions={submissions} />
-            </Box>
-            
-            {/* Snackbar for notifications */}
-            <Snackbar 
-                open={snackbar.open} 
-                autoHideDuration={6000} 
-                onClose={handleCloseSnackbar}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert 
-                    onClose={handleCloseSnackbar} 
-                    severity={snackbar.severity} 
-                    sx={{ width: '100%' }}
+                                        {/* Text Area */}
+                                        <Grid2 item sx={{ flex: 1 }}>
+                                            <Typography 
+                                                variant="h6" 
+                                                sx={{ 
+                                                    mb: 2, 
+                                                    color: '#1a237e',
+                                                    fontWeight: 500,
+                                                    position: 'relative',
+                                                    pl: 2,
+                                                    '&::before': {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        top: '50%',
+                                                        transform: 'translateY(-50%)',
+                                                        width: '4px',
+                                                        height: '20px',
+                                                        background: 'linear-gradient(to bottom, #1a237e, #0066cc)',
+                                                        borderRadius: '2px',
+                                                    }
+                                                }}
+                                            >
+                                                Reason for OD
+                                            </Typography>
+                                            <Textarea
+                                                size="lg"
+                                                name="description"
+                                                placeholder="Please provide detailed reason for On-Duty request..."
+                                                minRows={4}
+                                                value={formData.description}
+                                                sx={{
+                                                    borderRadius: '8px',
+                                                    fontSize: '1rem',
+                                                    border: '1px solid rgba(0, 0, 0, 0.1)',
+                                                    background: 'rgba(255, 255, 255, 0.9)',
+                                                    backdropFilter: 'blur(5px)',
+                                                    transition: 'all 0.3s ease',
+                                                    // '&:hover': {
+                                                    //     borderColor: '#1976d2',
+                                                    //     background: 'rgba(255, 255, 255, 1)',
+                                                    // },
+                                                    '&:focus': {
+                                                        borderColor: '#1976d2',
+                                                        boxShadow: '0 0 0 3px rgba(25,118,210,0.2)',
+                                                        background: 'rgba(255, 255, 255, 1)',
+                                                    },
+                                                    '&::placeholder': {
+                                                        color: 'rgba(0, 0, 0, 0.6)',
+                                                    }
+                                                }}
+                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            />
+                                        </Grid2>
+
+                                        {/* File Upload Component */}
+                                        <Grid2 item sx={{ mt: 2 }}>
+                                            <Typography 
+                                                variant="h6" 
+                                                sx={{ 
+                                                    mb: 2, 
+                                                    color: '#1a237e',
+                                                    fontWeight: 500,
+                                                    position: 'relative',
+                                                    pl: 2,
+                                                    '&::before': {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        top: '50%',
+                                                        transform: 'translateY(-50%)',
+                                                        width: '4px',
+                                                        height: '20px',
+                                                        background: 'linear-gradient(to bottom, #1a237e, #0066cc)',
+                                                        borderRadius: '2px',
+                                                    }
+                                                }}
+                                            >
+                                                Supporting Documents
+                                            </Typography>
+                                            <InputFileUpload 
+                                                onFilesSelected={handleFileChange} 
+                                                onUploadError={handleFileUploadError}
+                                            />
+                                        </Grid2>
+
+                                        {/* Submit Button */}
+                                        <Grid2 item sx={{ mt: 3 }}>
+                                            <Button 
+                                                type="submit" 
+                                                variant="contained" 
+                                                disabled={isLoading}
+                                                sx={{ 
+                                                    background: 'linear-gradient(45deg, #1a237e 30%, #0066cc 90%)',
+                                                    py: 2,
+                                                    px: 4,
+                                                    fontSize: '1.1rem',
+                                                    fontWeight: 'bold',
+                                                    letterSpacing: '1px',
+                                                    borderRadius: '8px',
+                                                    transition: 'all 0.3s ease',
+                                                    boxShadow: '0 4px 20px rgba(26, 35, 126, 0.2)',
+                                                    // '&:hover': {
+                                                    //     background: 'linear-gradient(45deg, #0066cc 30%, #1a237e 90%)',
+                                                    //     transform: 'translateY(-2px)',
+                                                    //     boxShadow: '0 6px 25px rgba(26, 35, 126, 0.3)',
+                                                    // },
+                                                    '&:disabled': {
+                                                        background: 'linear-gradient(45deg, #9e9e9e 30%, #757575 90%)',
+                                                        boxShadow: 'none',
+                                                    }
+                                                }} 
+                                                fullWidth
+                                            >
+                                                {isLoading ? (
+                                                    <CircularProgress size={24} sx={{ color: '#fff' }} />
+                                                ) : (
+                                                    'Submit Application'
+                                                )}
+                                            </Button>
+                                        </Grid2>
+                                    </Grid2>
+                                </StyledForm>
+                            </CardContent>
+                        </Card>
+
+                        {/* OD History Table */}
+                        <ODHistoryTable submissions={submissions} />
+                    </Box>
+                </Box>
+                
+                {/* Snackbar for notifications */}
+                <Snackbar 
+                    open={snackbar.open} 
+                    autoHideDuration={6000} 
+                    onClose={handleCloseSnackbar}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
                 >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-        </StyledContainer>
+                    <Alert 
+                        onClose={handleCloseSnackbar} 
+                        severity={snackbar.severity}
+                        sx={{ 
+                            width: '100%',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                        }}
+                    >
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
+            </StyledContainer>
+        </Box>
     );
 }
